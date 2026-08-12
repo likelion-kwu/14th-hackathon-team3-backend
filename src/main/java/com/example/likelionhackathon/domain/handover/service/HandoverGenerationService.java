@@ -1,0 +1,120 @@
+package com.example.likelionhackathon.domain.handover.service;
+
+import com.example.likelionhackathon.domain.handover.dto.OpenAiHandoverResult;
+import com.example.likelionhackathon.domain.handover.entity.CollaborationActivity;
+import com.example.likelionhackathon.domain.handover.entity.Handover;
+import com.example.likelionhackathon.domain.handover.entity.HandoverEvidence;
+import com.example.likelionhackathon.domain.handover.entity.HandoverItem;
+import com.example.likelionhackathon.domain.handover.entity.HandoverEnums.ReviewStatus;
+import com.example.likelionhackathon.domain.handover.repository.CollaborationActivityRepository;
+import com.example.likelionhackathon.domain.handover.repository.HandoverRepository;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.scheduling.annotation.Async;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.OffsetDateTime;
+import java.util.ArrayList;
+import java.util.List;
+
+@Slf4j
+@Service
+@RequiredArgsConstructor
+public class HandoverGenerationService {
+
+    private static final int EVIDENCE_SNIPPET_LENGTH = 500;
+
+    private final HandoverRepository handoverRepository;
+    private final CollaborationActivityRepository activityRepository;
+    private final OpenAiHandoverClient openAiHandoverClient;
+
+    @Async
+    @Transactional
+    public void generate(Long handoverId, boolean preserveManualEdits) {
+        Handover handover = handoverRepository.findOneById(handoverId).orElse(null);
+        if (handover == null) {
+            return;
+        }
+
+        try {
+            handover.markGenerationRunning();
+            List<CollaborationActivity> activities = activityRepository
+                    .findByProjectIdAndCycleIdAndOccurredAtBetweenAndProviderInOrderByOccurredAtAsc(
+                            handover.getProjectId(),
+                            handover.getCycleId(),
+                            handover.getSourceFrom(),
+                            handover.getSourceTo(),
+                            handover.getSourceTypes()
+                    );
+
+            if (activities.isEmpty()) {
+                handover.failGeneration();
+                return;
+            }
+
+            OpenAiHandoverResult result = openAiHandoverClient.generate(activities);
+            List<HandoverItem> generatedItems = toEntities(result, activities);
+
+            if (preserveManualEdits) {
+                handover.getItems().stream()
+                        .filter(HandoverItem::isManuallyEdited)
+                        .map(HandoverItem::copyForRefresh)
+                        .forEach(generatedItems::add);
+            }
+
+            handover.completeGeneration(generatedItems, OffsetDateTime.now());
+        } catch (Exception e) {
+            log.warn("AI 인수인계 비동기 생성 실패: handoverId={}, reason={}", handoverId, e.getMessage());
+            handover.failGeneration();
+        }
+    }
+
+    private List<HandoverItem> toEntities(
+            OpenAiHandoverResult result,
+            List<CollaborationActivity> activities
+    ) {
+        List<HandoverItem> items = new ArrayList<>();
+        for (OpenAiHandoverResult.GeneratedItem generated : result.items()) {
+            List<HandoverEvidence> evidences = safeIndexes(generated.evidenceIndexes()).stream()
+                    .filter(index -> index >= 0 && index < activities.size())
+                    .distinct()
+                    .map(activities::get)
+                    .map(this::toEvidence)
+                    .toList();
+
+            ReviewStatus reviewStatus = generated.reviewStatus();
+            if (evidences.isEmpty() && reviewStatus == ReviewStatus.VERIFIED) {
+                reviewStatus = ReviewStatus.NEEDS_REVIEW;
+            }
+
+            items.add(new HandoverItem(
+                    generated.category(),
+                    generated.title(),
+                    generated.description(),
+                    generated.assigneeMemberId(),
+                    reviewStatus,
+                    false,
+                    evidences
+            ));
+        }
+        return items;
+    }
+
+    private List<Integer> safeIndexes(List<Integer> indexes) {
+        return indexes == null ? List.of() : indexes;
+    }
+
+    private HandoverEvidence toEvidence(CollaborationActivity activity) {
+        String content = activity.getContent();
+        String snippet = content.length() <= EVIDENCE_SNIPPET_LENGTH
+                ? content
+                : content.substring(0, EVIDENCE_SNIPPET_LENGTH);
+        return new HandoverEvidence(
+                activity.getProvider(),
+                activity.getSourceName(),
+                snippet,
+                activity.getSourceUrl()
+        );
+    }
+}
