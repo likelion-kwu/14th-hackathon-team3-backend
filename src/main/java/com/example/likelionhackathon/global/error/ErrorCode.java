@@ -8,17 +8,65 @@ import org.springframework.http.HttpStatus;
 @RequiredArgsConstructor
 public enum ErrorCode {
 
-    // Common (1000 번대)
-    INVALID_INPUT_VALUE(HttpStatus.BAD_REQUEST, "C001", "올바르지 않은 입력값입니다."),
-    METHOD_NOT_ALLOWED(HttpStatus.METHOD_NOT_ALLOWED, "C002", "지원하지 않는 HTTP 메서드입니다."),
-    INTERNAL_SERVER_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "C003", "서버 내부 오류가 발생했습니다."),
+    // Common
+    INVALID_INPUT_VALUE(HttpStatus.BAD_REQUEST, "400INVALID_INPUT_VALUE", "올바르지 않은 입력값입니다."),
+    METHOD_NOT_ALLOWED(HttpStatus.METHOD_NOT_ALLOWED, "405METHOD_NOT_ALLOWED", "지원하지 않는 HTTP 메서드입니다."),
+    INTERNAL_SERVER_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "500INTERNAL_SERVER_ERROR", "서버 내부 오류가 발생했습니다."),
 
-    // User (2000 번대)
-    USER_NOT_FOUND(HttpStatus.NOT_FOUND, "U001", "존재하지 않는 사용자입니다."),
-    DUPLICATE_EMAIL(HttpStatus.CONFLICT, "U002", "이미 사용 중인 이메일입니다."),
+    // User / Auth
+    USER_NOT_FOUND(HttpStatus.NOT_FOUND, "404USER_NOT_FOUND", "존재하지 않는 사용자입니다."),
+    DUPLICATE_EMAIL(HttpStatus.CONFLICT, "409DUPLICATE_EMAIL", "이미 사용 중인 이메일입니다."),
+    UNAUTHORIZED_ACCESS(HttpStatus.UNAUTHORIZED, "401UNAUTHORIZED", "인증 정보가 유효하지 않습니다."),
 
-    // Auth (3000 번대)
-    UNAUTHORIZED_ACCESS(HttpStatus.UNAUTHORIZED, "A001", "인증 정보가 유효하지 않습니다.");
+    // Workspace
+    INVALID_WORKSPACE_INPUT(HttpStatus.BAD_REQUEST, "400INVALID_WORKSPACE_INPUT", "워크스페이스 입력값이 올바르지 않습니다."),
+    WORKSPACE_NAME_DUPLICATED(HttpStatus.CONFLICT, "409WORKSPACE_NAME_DUPLICATED", "동일한 워크스페이스 이름이 존재합니다."),
+    WORKSPACE_ACCESS_DENIED(HttpStatus.FORBIDDEN, "403WORKSPACE_ACCESS_DENIED", "워크스페이스 접근 권한이 없습니다."),
+    WORKSPACE_NOT_FOUND(HttpStatus.NOT_FOUND, "404WORKSPACE_NOT_FOUND", "워크스페이스를 찾을 수 없습니다."),
+    WORKSPACE_ADMIN_REQUIRED(HttpStatus.FORBIDDEN, "403WORKSPACE_ADMIN_REQUIRED", "워크스페이스 관리 권한이 필요합니다."),
+    WORKSPACE_VERSION_CONFLICT(HttpStatus.CONFLICT, "409WORKSPACE_VERSION_CONFLICT", "다른 사용자가 워크스페이스를 먼저 수정했습니다."),
+    INVALID_INVITATION_INPUT(HttpStatus.BAD_REQUEST, "400INVALID_INVITATION_INPUT", "초대 방식 또는 이메일이 올바르지 않습니다."),
+    ALREADY_WORKSPACE_MEMBER(HttpStatus.CONFLICT, "409ALREADY_WORKSPACE_MEMBER", "이미 워크스페이스 멤버입니다."),
+    INVITATION_NOT_FOUND(HttpStatus.NOT_FOUND, "404INVITATION_NOT_FOUND", "초대 정보를 찾을 수 없습니다."),
+    INVITATION_EXPIRED(HttpStatus.GONE, "410INVITATION_EXPIRED", "초대가 만료되었습니다."),
+    MEMBER_NOT_FOUND(HttpStatus.NOT_FOUND, "404MEMBER_NOT_FOUND", "멤버를 찾을 수 없습니다."),
+    LAST_OWNER_CANNOT_CHANGE(HttpStatus.CONFLICT, "409LAST_OWNER_CANNOT_CHANGE", "마지막 OWNER는 변경할 수 없습니다."),
+
+    // Project
+    INVALID_PROJECT_INPUT(HttpStatus.BAD_REQUEST, "400INVALID_PROJECT_INPUT", "프로젝트 입력값이 올바르지 않습니다."),
+    PROJECT_CREATE_DENIED(HttpStatus.FORBIDDEN, "403PROJECT_CREATE_DENIED", "프로젝트 생성 권한이 없습니다."),
+    PROJECT_NAME_DUPLICATED(HttpStatus.CONFLICT, "409PROJECT_NAME_DUPLICATED", "동일한 프로젝트 이름이 존재합니다."),
+    PROJECT_ACCESS_DENIED(HttpStatus.FORBIDDEN, "403PROJECT_ACCESS_DENIED", "프로젝트 접근 권한이 없습니다."),
+    PROJECT_NOT_FOUND(HttpStatus.NOT_FOUND, "404PROJECT_NOT_FOUND", "프로젝트를 찾을 수 없습니다."),
+    PROJECT_ADMIN_REQUIRED(HttpStatus.FORBIDDEN, "403PROJECT_ADMIN_REQUIRED", "프로젝트 관리 권한이 필요합니다."),
+    PROJECT_VERSION_CONFLICT(HttpStatus.CONFLICT, "409PROJECT_VERSION_CONFLICT", "다른 사용자가 프로젝트를 먼저 수정했습니다."),
+    INVALID_TEAM_SETTING(HttpStatus.BAD_REQUEST, "400INVALID_TEAM_SETTING", "팀 설정이 올바르지 않습니다."),
+    TEAM_NOT_FOUND(HttpStatus.NOT_FOUND, "404TEAM_NOT_FOUND", "팀을 찾을 수 없습니다."),
+    INVALID_TIMEZONE(HttpStatus.UNPROCESSABLE_CONTENT, "422INVALID_TIMEZONE", "유효하지 않은 타임존입니다."),
+    INVALID_MEMBER_ACTION(HttpStatus.BAD_REQUEST, "400INVALID_MEMBER_ACTION", "멤버 관리 작업이 올바르지 않습니다."),
+    MEMBER_OR_TEAM_NOT_FOUND(HttpStatus.NOT_FOUND, "404MEMBER_OR_TEAM_NOT_FOUND", "멤버 또는 팀을 찾을 수 없습니다."),
+    LAST_PROJECT_ADMIN_CANNOT_CHANGE(HttpStatus.CONFLICT, "409LAST_PROJECT_ADMIN_CANNOT_CHANGE", "마지막 프로젝트 관리자는 변경할 수 없습니다."),
+    INVALID_INTEGRATION_ACTION(HttpStatus.BAD_REQUEST, "400INVALID_INTEGRATION_ACTION", "외부 연동 작업이 올바르지 않습니다."),
+    INTEGRATION_NOT_FOUND(HttpStatus.NOT_FOUND, "404INTEGRATION_NOT_FOUND", "외부 연동을 찾을 수 없습니다."),
+    OAUTH_SCOPE_INSUFFICIENT(HttpStatus.UNPROCESSABLE_CONTENT, "422OAUTH_SCOPE_INSUFFICIENT", "외부 연동 권한 범위가 부족합니다."),
+
+    // Handover
+    INVALID_SOURCE_RANGE(HttpStatus.BAD_REQUEST, "400INVALID_SOURCE_RANGE", "수집 기간이 올바르지 않습니다."),
+    PROJECT_OR_CYCLE_NOT_FOUND(HttpStatus.NOT_FOUND, "404PROJECT_OR_CYCLE_NOT_FOUND", "프로젝트 또는 Cycle을 찾을 수 없습니다."),
+    HANDOVER_ALREADY_GENERATING(HttpStatus.CONFLICT, "409HANDOVER_ALREADY_GENERATING", "인수인계 생성 작업이 이미 진행 중입니다."),
+    NO_CONNECTED_SOURCE(HttpStatus.UNPROCESSABLE_CONTENT, "422NO_CONNECTED_SOURCE", "연결된 협업 도구가 없습니다."),
+    HANDOVER_ACCESS_DENIED(HttpStatus.FORBIDDEN, "403HANDOVER_ACCESS_DENIED", "인수인계 접근 권한이 없습니다."),
+    HANDOVER_NOT_FOUND(HttpStatus.NOT_FOUND, "404HANDOVER_NOT_FOUND", "인수인계를 찾을 수 없습니다."),
+    HANDOVER_LOCKED(HttpStatus.CONFLICT, "409HANDOVER_LOCKED", "예약 또는 전달 완료된 인수인계입니다."),
+    REFRESH_ALREADY_RUNNING(HttpStatus.CONFLICT, "409REFRESH_ALREADY_RUNNING", "최신 활동 갱신 작업이 이미 진행 중입니다."),
+    SOURCE_SYNC_FAILED(HttpStatus.UNPROCESSABLE_CONTENT, "422SOURCE_SYNC_FAILED", "협업 도구 동기화에 실패했습니다."),
+    INVALID_DRAFT(HttpStatus.BAD_REQUEST, "400INVALID_DRAFT", "인수인계 항목 또는 전달 정보가 올바르지 않습니다."),
+    DRAFT_VERSION_CONFLICT(HttpStatus.CONFLICT, "409DRAFT_VERSION_CONFLICT", "다른 사용자가 인수인계 초안을 먼저 저장했습니다."),
+    INVALID_EVIDENCE(HttpStatus.UNPROCESSABLE_CONTENT, "422INVALID_EVIDENCE", "유효하지 않은 근거가 포함되어 있습니다."),
+    HANDOVER_NOT_READY(HttpStatus.CONFLICT, "409HANDOVER_NOT_READY", "인수인계 초안 또는 전달 설정이 완료되지 않았습니다."),
+    HANDOVER_VERSION_CONFLICT(HttpStatus.CONFLICT, "409HANDOVER_VERSION_CONFLICT", "최신 인수인계 초안 버전이 아닙니다."),
+    HANDOVER_ALREADY_DELIVERED(HttpStatus.CONFLICT, "409HANDOVER_ALREADY_DELIVERED", "인수인계가 이미 전달 또는 예약되었습니다."),
+    REVIEW_ALERT_NOT_ACKNOWLEDGED(HttpStatus.UNPROCESSABLE_CONTENT, "422REVIEW_ALERT_NOT_ACKNOWLEDGED", "확인 필요 항목을 인지해야 합니다.");
 
     private final HttpStatus httpStatus;
     private final String code;
