@@ -79,7 +79,16 @@ public enum ErrorCode {
     HANDOVER_NOT_READY(HttpStatus.CONFLICT, "409HANDOVER_NOT_READY", "인수인계 초안 또는 전달 설정이 완료되지 않았습니다."),
     HANDOVER_VERSION_CONFLICT(HttpStatus.CONFLICT, "409HANDOVER_VERSION_CONFLICT", "최신 인수인계 초안 버전이 아닙니다."),
     HANDOVER_ALREADY_DELIVERED(HttpStatus.CONFLICT, "409HANDOVER_ALREADY_DELIVERED", "인수인계가 이미 전달 또는 예약되었습니다."),
-    REVIEW_ALERT_NOT_ACKNOWLEDGED(HttpStatus.UNPROCESSABLE_CONTENT, "422REVIEW_ALERT_NOT_ACKNOWLEDGED", "확인 필요 항목을 인지해야 합니다.");
+    REVIEW_ALERT_NOT_ACKNOWLEDGED(HttpStatus.UNPROCESSABLE_CONTENT, "422REVIEW_ALERT_NOT_ACKNOWLEDGED", "확인 필요 항목을 인지해야 합니다."),
+
+    // Cycle
+    // 사이클 명세의 공통 규약은 실패 code를 "상태코드 + 도메인" 형식으로 정의한다. (ex. 404CYCLE)
+    // 상세 사유는 CustomException 의 detailMessage 로 구분한다.
+    CYCLE_INVALID_INPUT(HttpStatus.BAD_REQUEST, "400CYCLE", "사이클 입력값이 올바르지 않습니다."),
+    CYCLE_NOT_FOUND(HttpStatus.NOT_FOUND, "404CYCLE", "존재하지 않는 사이클입니다."),
+    CYCLE_CONFLICT(HttpStatus.CONFLICT, "409CYCLE", "요청을 처리할 수 없는 사이클 상태입니다."),
+    CYCLE_PROJECT_NOT_FOUND(HttpStatus.NOT_FOUND, "404PROJECT", "존재하지 않는 프로젝트입니다."),
+    CYCLE_PROJECT_ACCESS_DENIED(HttpStatus.FORBIDDEN, "403PROJECT", "프로젝트에 대한 접근 권한이 없습니다.");
 
     private final HttpStatus httpStatus;
     private final String code;
