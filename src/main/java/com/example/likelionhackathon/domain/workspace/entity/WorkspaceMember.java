@@ -123,6 +123,19 @@ public class WorkspaceMember {
         this.status = WorkspaceMemberStatus.ACTIVE;
     }
 
+    public void updateProfile(String name, String companyName, String teamName, String jobTitle) {
+        if (name != null) {
+            this.name = name;
+        }
+        if (companyName != null) {
+            this.companyName = companyName;
+        }
+        if (teamName != null) {
+            this.teamName = teamName;
+        }
+        this.jobTitle = jobTitle;
+    }
+
     public void suspend() {
         status = WorkspaceMemberStatus.SUSPENDED;
     }

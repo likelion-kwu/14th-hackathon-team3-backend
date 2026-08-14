@@ -117,6 +117,33 @@ public class WorkspaceService {
     }
 
     @Transactional(readOnly = true)
+    public WorkspaceResponse.Profile getMyProfile(Long workspaceId) {
+        String principalKey = currentUserProvider.currentPrincipalKey();
+        WorkspaceMember member = requireAccess(workspaceId, principalKey);
+        return toProfile(workspaceId, principalKey, member);
+    }
+
+    @Transactional
+    public WorkspaceResponse.Profile updateMyProfile(
+            Long workspaceId,
+            WorkspaceRequest.UpdateProfile request
+    ) {
+        validateProfileUpdate(request);
+        String principalKey = currentUserProvider.currentPrincipalKey();
+        WorkspaceMember member = requireAccess(workspaceId, principalKey);
+
+        member.updateProfile(
+                normalizeRequiredProfileValue(request.name()),
+                normalizeRequiredProfileValue(request.companyName()),
+                normalizeRequiredProfileValue(request.teamName()),
+                request.jobTitle() == null
+                        ? member.getJobTitle()
+                        : normalizeOptionalProfileValue(request.jobTitle())
+        );
+        return toProfile(workspaceId, principalKey, member);
+    }
+
+    @Transactional(readOnly = true)
     public WorkspaceResponse.Detail getDetail(Long workspaceId) {
         Workspace workspace = findWorkspace(workspaceId);
         WorkspaceMember membership = requireAccess(workspaceId);
@@ -354,12 +381,54 @@ public class WorkspaceService {
     }
 
     private WorkspaceMember requireAccess(Long workspaceId) {
-        return memberRepository.findByWorkspaceIdAndPrincipalKey(
-                        workspaceId,
-                        currentUserProvider.currentPrincipalKey()
-                )
+        return requireAccess(workspaceId, currentUserProvider.currentPrincipalKey());
+    }
+
+    private WorkspaceMember requireAccess(Long workspaceId, String principalKey) {
+        return memberRepository.findByWorkspaceIdAndPrincipalKey(workspaceId, principalKey)
                 .filter(member -> member.getStatus() == WorkspaceMemberStatus.ACTIVE)
                 .orElseThrow(() -> new CustomException(ErrorCode.WORKSPACE_ACCESS_DENIED));
+    }
+
+    private WorkspaceResponse.Profile toProfile(
+            Long workspaceId,
+            String principalKey,
+            WorkspaceMember member
+    ) {
+        return new WorkspaceResponse.Profile(
+                Long.valueOf(principalKey),
+                workspaceId,
+                member.getName(),
+                member.getCompanyName(),
+                member.getTeamName(),
+                member.getJobTitle()
+        );
+    }
+
+    private void validateProfileUpdate(WorkspaceRequest.UpdateProfile request) {
+        if (request.name() == null
+                && request.companyName() == null
+                && request.teamName() == null
+                && request.jobTitle() == null) {
+            throw new CustomException(ErrorCode.INVALID_INPUT_VALUE);
+        }
+        validateRequiredProfileValue(request.name());
+        validateRequiredProfileValue(request.companyName());
+        validateRequiredProfileValue(request.teamName());
+    }
+
+    private void validateRequiredProfileValue(String value) {
+        if (value != null && value.isBlank()) {
+            throw new CustomException(ErrorCode.INVALID_INPUT_VALUE);
+        }
+    }
+
+    private String normalizeRequiredProfileValue(String value) {
+        return value == null ? null : value.trim();
+    }
+
+    private String normalizeOptionalProfileValue(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
     }
 
     private WorkspaceMember requireAdmin(Long workspaceId) {
