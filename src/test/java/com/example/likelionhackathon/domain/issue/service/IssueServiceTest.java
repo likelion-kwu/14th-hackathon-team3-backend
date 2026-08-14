@@ -12,6 +12,7 @@ import com.example.likelionhackathon.domain.issue.entity.IssueChecklistItem;
 import com.example.likelionhackathon.domain.issue.entity.IssueEnums.IssuePriority;
 import com.example.likelionhackathon.domain.issue.entity.IssueEnums.IssueStatus;
 import com.example.likelionhackathon.domain.issue.repository.IssueRepository;
+import com.example.likelionhackathon.domain.project.service.ProjectAccessService;
 import com.example.likelionhackathon.global.error.ErrorCode;
 import com.example.likelionhackathon.global.error.exception.CustomException;
 import org.junit.jupiter.api.BeforeEach;
@@ -29,6 +30,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -37,6 +39,7 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class IssueServiceTest {
 
+    private static final Long PROJECT_ID = 1L;
     private static final Long CYCLE_ID = 3L;
     private static final Long ISSUE_ID = 12L;
     private static final Long ASSIGNEE_ID = 7L;
@@ -58,12 +61,44 @@ class IssueServiceTest {
     @Mock
     private CycleActivityService cycleActivityService;
 
+    @Mock
+    private ProjectAccessService projectAccessService;
+
     private IssueService issueService;
 
     @BeforeEach
     void setUp() {
         issueService = new IssueService(
-                issueRepository, cycleRepository, issueMemberPort, cycleIssuePort, cycleActivityService);
+                issueRepository, cycleRepository, issueMemberPort, cycleIssuePort,
+                cycleActivityService, projectAccessService);
+    }
+
+    @Test
+    void getDetailRejectsNonProjectMember() {
+        when(issueRepository.findById(ISSUE_ID)).thenReturn(Optional.of(issue()));
+        when(cycleRepository.findById(CYCLE_ID)).thenReturn(Optional.of(cycle()));
+        doThrow(new CustomException(ErrorCode.PROJECT_ACCESS_DENIED))
+                .when(projectAccessService).requireAccess(PROJECT_ID);
+
+        assertThatThrownBy(() -> issueService.getDetail(ISSUE_ID))
+                .isInstanceOf(CustomException.class)
+                .extracting(e -> ((CustomException) e).getErrorCode())
+                .isEqualTo(ErrorCode.PROJECT_ACCESS_DENIED);
+    }
+
+    @Test
+    void deleteRejectsNonProjectMember() {
+        when(issueRepository.findById(ISSUE_ID)).thenReturn(Optional.of(issue()));
+        when(cycleRepository.findById(CYCLE_ID)).thenReturn(Optional.of(cycle()));
+        doThrow(new CustomException(ErrorCode.PROJECT_ACCESS_DENIED))
+                .when(projectAccessService).requireAccess(PROJECT_ID);
+
+        assertThatThrownBy(() -> issueService.delete(ISSUE_ID))
+                .isInstanceOf(CustomException.class)
+                .extracting(e -> ((CustomException) e).getErrorCode())
+                .isEqualTo(ErrorCode.PROJECT_ACCESS_DENIED);
+
+        verify(issueRepository, never()).delete(any(Issue.class));
     }
 
     @Test
@@ -138,6 +173,7 @@ class IssueServiceTest {
         Issue issue = issue();
         issue.changeStatus(IssueStatus.DONE);
         when(issueRepository.findById(ISSUE_ID)).thenReturn(Optional.of(issue));
+        when(cycleRepository.findById(CYCLE_ID)).thenReturn(Optional.of(cycle()));
 
         IssueRequest.Update request = new IssueRequest.Update(
                 CYCLE_ID, "제목", IssuePriority.HIGH, "설명", null, ASSIGNEE_ID,
@@ -182,6 +218,7 @@ class IssueServiceTest {
         Issue issue = issue();
         issue.changeStatus(IssueStatus.CANCELED);
         when(issueRepository.findById(ISSUE_ID)).thenReturn(Optional.of(issue));
+        when(cycleRepository.findById(CYCLE_ID)).thenReturn(Optional.of(cycle()));
 
         assertThatThrownBy(() -> issueService.changeStatus(
                 ISSUE_ID, new IssueRequest.ChangeStatus(IssueStatus.IN_PROGRESS, null)))
@@ -197,6 +234,7 @@ class IssueServiceTest {
         issue.changeStatus(IssueStatus.IN_PROGRESS);
         addChecklistItem(issue, 1L, "미완료 항목", false, 0);
         when(issueRepository.findById(ISSUE_ID)).thenReturn(Optional.of(issue));
+        when(cycleRepository.findById(CYCLE_ID)).thenReturn(Optional.of(cycle()));
 
         assertThatThrownBy(() -> issueService.changeStatus(
                 ISSUE_ID, new IssueRequest.ChangeStatus(IssueStatus.DONE, null)))
@@ -213,6 +251,7 @@ class IssueServiceTest {
         addChecklistItem(issue, 1L, "완료된 항목", true, 0);
 
         when(issueRepository.findById(ISSUE_ID)).thenReturn(Optional.of(issue));
+        when(cycleRepository.findById(CYCLE_ID)).thenReturn(Optional.of(cycle()));
         lenient().when(issueMemberPort.findProfile(anyLong())).thenReturn(Optional.empty());
         when(cycleIssuePort.statsOf(CYCLE_ID)).thenReturn(new IssueStats(11, 9, 2, 0, 0));
 
@@ -231,6 +270,7 @@ class IssueServiceTest {
         addChecklistItem(issue, 1L, "항목 1", true, 0);
         addChecklistItem(issue, 2L, "항목 2", false, 1);
         when(issueRepository.findById(ISSUE_ID)).thenReturn(Optional.of(issue));
+        when(cycleRepository.findById(CYCLE_ID)).thenReturn(Optional.of(cycle()));
 
         IssueResponse.ChecklistChecked response =
                 issueService.checkItem(ISSUE_ID, 2L, new IssueRequest.CheckItem(true));
@@ -246,6 +286,7 @@ class IssueServiceTest {
         Issue issue = issue();
         addChecklistItem(issue, 1L, "항목 1", false, 0);
         when(issueRepository.findById(ISSUE_ID)).thenReturn(Optional.of(issue));
+        when(cycleRepository.findById(CYCLE_ID)).thenReturn(Optional.of(cycle()));
 
         assertThatThrownBy(() -> issueService.checkItem(ISSUE_ID, 99L, new IssueRequest.CheckItem(true)))
                 .isInstanceOf(CustomException.class)
@@ -256,7 +297,7 @@ class IssueServiceTest {
 
     @Test
     void getIssuesRejectsUnknownStatusFilter() {
-        when(cycleRepository.existsById(CYCLE_ID)).thenReturn(true);
+        when(cycleRepository.findById(CYCLE_ID)).thenReturn(Optional.of(cycle()));
 
         assertThatThrownBy(() -> issueService.getIssues(
                 CYCLE_ID, List.of("NOT_A_STATUS"), null, null, null, null, 0, 20))
@@ -268,7 +309,7 @@ class IssueServiceTest {
 
     @Test
     void getIssuesRejectsUnknownSortField() {
-        when(cycleRepository.existsById(CYCLE_ID)).thenReturn(true);
+        when(cycleRepository.findById(CYCLE_ID)).thenReturn(Optional.of(cycle()));
 
         assertThatThrownBy(() -> issueService.getIssues(
                 CYCLE_ID, null, null, null, null, "dropTable,desc", 0, 20))

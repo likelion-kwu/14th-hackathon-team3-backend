@@ -14,6 +14,7 @@ import com.example.likelionhackathon.domain.issue.entity.IssueEnums.IssuePriorit
 import com.example.likelionhackathon.domain.issue.entity.IssueEnums.IssueStatus;
 import com.example.likelionhackathon.domain.issue.repository.IssueRepository;
 import com.example.likelionhackathon.domain.issue.service.IssueMemberPort.MemberProfile;
+import com.example.likelionhackathon.domain.project.service.ProjectAccessService;
 import com.example.likelionhackathon.global.error.ErrorCode;
 import com.example.likelionhackathon.global.error.exception.CustomException;
 import jakarta.persistence.criteria.Predicate;
@@ -48,6 +49,7 @@ public class IssueService {
     private final IssueMemberPort issueMemberPort;
     private final CycleIssuePort cycleIssuePort;
     private final CycleActivityService cycleActivityService;
+    private final ProjectAccessService projectAccessService;
 
     public List<IssueResponse.Summary> getIssues(
             Long cycleId,
@@ -59,9 +61,7 @@ public class IssueService {
             int page,
             int size
     ) {
-        if (!cycleRepository.existsById(cycleId)) {
-            throw new CustomException(ErrorCode.CYCLE_NOT_FOUND);
-        }
+        findCycle(cycleId);
 
         List<IssueStatus> statuses = parseStatuses(status);
         IssuePriority parsedPriority = parsePriority(priority);
@@ -381,13 +381,31 @@ public class IssueService {
         return (name == null || name.isBlank()) ? "담당자" : name;
     }
 
+    /**
+     * 사이클을 찾고 소속 프로젝트 접근 권한까지 확인한다.
+     */
     private Cycle findCycle(Long cycleId) {
-        return cycleRepository.findById(cycleId)
+        Cycle cycle = cycleRepository.findById(cycleId)
                 .orElseThrow(() -> new CustomException(ErrorCode.CYCLE_NOT_FOUND));
+        requireProjectAccess(cycle.getProjectId());
+        return cycle;
     }
 
+    /**
+     * 이슈를 찾고 그 이슈가 속한 사이클의 프로젝트 접근 권한까지 확인한다.
+     * issueId 로 들어오는 모든 작업이 이 메서드를 거친다.
+     */
     private Issue findIssue(Long issueId) {
-        return issueRepository.findById(issueId)
+        Issue issue = issueRepository.findById(issueId)
                 .orElseThrow(() -> new CustomException(ErrorCode.ISSUE_NOT_FOUND));
+        Cycle cycle = cycleRepository.findById(issue.getCycleId())
+                .orElseThrow(() -> new CustomException(ErrorCode.CYCLE_NOT_FOUND));
+        requireProjectAccess(cycle.getProjectId());
+        return issue;
+    }
+
+    private void requireProjectAccess(Long projectId) {
+        projectAccessService.findProject(projectId);
+        projectAccessService.requireAccess(projectId);
     }
 }
