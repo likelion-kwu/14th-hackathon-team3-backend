@@ -1,8 +1,11 @@
 package com.example.likelionhackathon.domain.user.dto;
 
+import com.example.likelionhackathon.domain.user.entity.UserEnums.ActivityStatus;
+
 import com.example.likelionhackathon.global.validation.Utf8ByteLength;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
 public final class UserRequest {
@@ -21,6 +24,12 @@ public final class UserRequest {
             String password,
             @NotBlank(message = "비밀번호 확인은 필수입니다.")
             String passwordConfirm
+    ) {
+    }
+
+    public record UpdateActivityStatus(
+            @NotNull(message = "활동 상태는 필수입니다.")
+            ActivityStatus status
     ) {
     }
 }

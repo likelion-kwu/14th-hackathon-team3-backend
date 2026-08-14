@@ -3,7 +3,9 @@ package com.example.likelionhackathon.domain.user.controller;
 import com.example.likelionhackathon.domain.auth.entity.EmailVerification;
 import com.example.likelionhackathon.domain.auth.repository.EmailVerificationRepository;
 import com.example.likelionhackathon.domain.user.entity.User;
+import com.example.likelionhackathon.domain.user.entity.UserEnums.ActivityStatus;
 import com.example.likelionhackathon.domain.user.repository.UserRepository;
+import com.example.likelionhackathon.global.security.jwt.JwtTokenProvider;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -14,8 +16,11 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.OffsetDateTime;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -27,6 +32,7 @@ class UserControllerTest {
     @Autowired private UserRepository userRepository;
     @Autowired private EmailVerificationRepository verificationRepository;
     @Autowired private PasswordEncoder passwordEncoder;
+    @Autowired private JwtTokenProvider jwtTokenProvider;
 
     @BeforeEach
     void setUp() {
@@ -50,6 +56,7 @@ class UserControllerTest {
         assertThat(saved.getCountry()).isNull();
         assertThat(saved.getLanguage()).isNull();
         assertThat(saved.getTimezone()).isNull();
+        assertThat(saved.getActivityStatus()).isEqualTo(ActivityStatus.OFF);
         assertThat(verificationRepository.findByEmail("user@example.com")).isEmpty();
     }
 
@@ -158,6 +165,107 @@ class UserControllerTest {
                 .andExpect(jsonPath("$.code").value("200OK"))
                 .andExpect(jsonPath("$.data.userId").isNumber())
                 .andExpect(jsonPath("$.data.accessToken").isNotEmpty());
+
+        assertThat(userRepository.findByEmail("login@example.com").orElseThrow().getActivityStatus())
+                .isEqualTo(ActivityStatus.OFF);
+    }
+
+    @Test
+    void getActivityStatusReturnsOffAndActive() throws Exception {
+        User user = saveUser("status@example.com");
+
+        mockMvc.perform(get(activityStatusUrl()).header("Authorization", bearer(user)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("200OK"))
+                .andExpect(jsonPath("$.data.status").value("OFF"));
+
+        user.changeActivityStatus(ActivityStatus.ACTIVE);
+        userRepository.saveAndFlush(user);
+
+        mockMvc.perform(get(activityStatusUrl()).header("Authorization", bearer(user)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("ACTIVE"));
+    }
+
+    @Test
+    void updateActivityStatusSupportsActiveAndOff() throws Exception {
+        User user = saveUser("update-status@example.com");
+
+        mockMvc.perform(patch(activityStatusUrl())
+                        .header("Authorization", bearer(user))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\":\"ACTIVE\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("ACTIVE"));
+        assertThat(userRepository.findById(user.getId()).orElseThrow().getActivityStatus())
+                .isEqualTo(ActivityStatus.ACTIVE);
+
+        mockMvc.perform(patch(activityStatusUrl())
+                        .header("Authorization", bearer(user))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\":\"OFF\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("OFF"));
+        assertThat(userRepository.findById(user.getId()).orElseThrow().getActivityStatus())
+                .isEqualTo(ActivityStatus.OFF);
+    }
+
+    @Test
+    void updateActivityStatusChangesOnlyJwtUser() throws Exception {
+        User currentUser = saveUser("current@example.com");
+        User otherUser = saveUser("other@example.com");
+
+        mockMvc.perform(patch(activityStatusUrl())
+                        .header("Authorization", bearer(currentUser))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\":\"ACTIVE\"}"))
+                .andExpect(status().isOk());
+
+        assertThat(userRepository.findById(currentUser.getId()).orElseThrow().getActivityStatus())
+                .isEqualTo(ActivityStatus.ACTIVE);
+        assertThat(userRepository.findById(otherUser.getId()).orElseThrow().getActivityStatus())
+                .isEqualTo(ActivityStatus.OFF);
+    }
+
+    @Test
+    void updateActivityStatusRejectsInvalidStatus() throws Exception {
+        User user = saveUser("invalid-status@example.com");
+
+        for (String body : List.of(
+                "{}",
+                "{\"status\":null}",
+                "{\"status\":\"\"}",
+                "{\"status\":\"BUSY\"}"
+        )) {
+            mockMvc.perform(patch(activityStatusUrl())
+                            .header("Authorization", bearer(user))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(body))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.code").value("400INVALID_INPUT_VALUE"));
+        }
+    }
+
+    @Test
+    void activityStatusApisRequireJwt() throws Exception {
+        mockMvc.perform(get(activityStatusUrl()))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("401UNAUTHORIZED"));
+
+        mockMvc.perform(patch(activityStatusUrl())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\":\"ACTIVE\"}"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("401UNAUTHORIZED"));
+    }
+
+    @Test
+    void activityStatusReturnsUserNotFoundForMissingJwtUser() throws Exception {
+        String authorization = "Bearer " + jwtTokenProvider.createAccessToken(Long.MAX_VALUE);
+
+        mockMvc.perform(get(activityStatusUrl()).header("Authorization", authorization))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("404USER_NOT_FOUND"));
     }
 
     private void saveVerifiedEmail(String email) {
@@ -172,5 +280,17 @@ class UserControllerTest {
         return """
                 {"name":"홍길동","email":"%s","password":"%s","passwordConfirm":"%s"}
                 """.formatted(email, password, passwordConfirm);
+    }
+
+    private User saveUser(String email) {
+        return userRepository.save(User.create(email, passwordEncoder.encode("password123!"), "User"));
+    }
+
+    private String bearer(User user) {
+        return "Bearer " + jwtTokenProvider.createAccessToken(user.getId());
+    }
+
+    private String activityStatusUrl() {
+        return "/api/v1/users/me/activity-status";
     }
 }
