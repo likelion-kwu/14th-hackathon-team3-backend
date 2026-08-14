@@ -1,12 +1,16 @@
 package com.example.likelionhackathon.domain.auth.controller;
 
+import com.example.likelionhackathon.domain.auth.dto.AuthRequest;
 import com.example.likelionhackathon.domain.auth.entity.PasswordResetVerification;
 import com.example.likelionhackathon.domain.auth.repository.PasswordResetVerificationRepository;
 import com.example.likelionhackathon.domain.auth.service.EmailVerificationCodeGenerator;
 import com.example.likelionhackathon.domain.auth.service.PasswordResetMailService;
 import com.example.likelionhackathon.domain.auth.service.PasswordResetTokenGenerator;
+import com.example.likelionhackathon.domain.auth.service.PasswordResetService;
 import com.example.likelionhackathon.domain.user.entity.User;
 import com.example.likelionhackathon.domain.user.repository.UserRepository;
+import com.example.likelionhackathon.global.error.ErrorCode;
+import com.example.likelionhackathon.global.error.exception.CustomException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -19,6 +23,11 @@ import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.OffsetDateTime;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.*;
@@ -32,6 +41,7 @@ class PasswordResetControllerTest {
     @Autowired UserRepository userRepository;
     @Autowired PasswordResetVerificationRepository repository;
     @Autowired PasswordEncoder passwordEncoder;
+    @Autowired PasswordResetService passwordResetService;
     @MockitoBean EmailVerificationCodeGenerator codeGenerator;
     @MockitoBean PasswordResetTokenGenerator tokenGenerator;
     @MockitoBean PasswordResetMailService mailService;
@@ -150,6 +160,27 @@ class PasswordResetControllerTest {
         verifyNoInteractions(tokenGenerator);
     }
 
+    @Test void concurrentWrongCodesIncrementFailedAttemptsWithoutLostUpdate() throws Exception {
+        repository.save(createVerification("381205", OffsetDateTime.now().plusMinutes(5)));
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch start = new CountDownLatch(1);
+
+        try {
+            Future<Boolean> first = executor.submit(() -> verifyWrongCodeAfterSignal(ready, start));
+            Future<Boolean> second = executor.submit(() -> verifyWrongCodeAfterSignal(ready, start));
+            assertThat(ready.await(5, TimeUnit.SECONDS)).isTrue();
+            start.countDown();
+
+            assertThat(first.get(10, TimeUnit.SECONDS)).isTrue();
+            assertThat(second.get(10, TimeUnit.SECONDS)).isTrue();
+        } finally {
+            executor.shutdownNow();
+        }
+
+        assertThat(repository.findByEmail("user@example.com").orElseThrow().getFailedAttempts()).isEqualTo(2);
+    }
+
     @Test void resetRejectsNewPasswordOverSeventyTwoUtf8Bytes() throws Exception {
         repository.save(verified("381205", "reset-token"));
         String password = "가".repeat(25);
@@ -175,6 +206,17 @@ class PasswordResetControllerTest {
     private PasswordResetVerification createVerification(String code, OffsetDateTime expiresAt) {
         return PasswordResetVerification.create("user@example.com", passwordEncoder.encode(code), expiresAt,
                 OffsetDateTime.now().minusSeconds(1));
+    }
+    private boolean verifyWrongCodeAfterSignal(CountDownLatch ready, CountDownLatch start)
+            throws InterruptedException {
+        ready.countDown();
+        if (!start.await(5, TimeUnit.SECONDS)) return false;
+        try {
+            passwordResetService.verify(new AuthRequest.VerifyPasswordReset("user@example.com", "927104"));
+            return false;
+        } catch (CustomException exception) {
+            return exception.getErrorCode() == ErrorCode.INVALID_VERIFICATION_CODE;
+        }
     }
     private org.springframework.test.web.servlet.ResultActions request(String email) throws Exception { return mockMvc.perform(post("/api/v1/auth/password-reset/request").contentType(MediaType.APPLICATION_JSON).content("{\"email\":\""+email+"\"}")); }
     private org.springframework.test.web.servlet.ResultActions verifyCode(String code) throws Exception { return mockMvc.perform(post("/api/v1/auth/password-reset/verify").contentType(MediaType.APPLICATION_JSON).content("{\"email\":\"user@example.com\",\"verificationCode\":\""+code+"\"}")); }

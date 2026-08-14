@@ -56,7 +56,7 @@ public class EmailVerificationService {
 
     @Transactional(noRollbackFor = CustomException.class)
     public AuthResponse.EmailVerificationResult verify(AuthRequest.VerifyEmail request) {
-        EmailVerification verification = verificationRepository.findByEmail(request.email())
+        EmailVerification verification = verificationRepository.findByEmailForUpdate(request.email())
                 .orElseThrow(() -> new CustomException(ErrorCode.EMAIL_VERIFICATION_NOT_FOUND));
         OffsetDateTime now = OffsetDateTime.now();
 

@@ -1,9 +1,13 @@
 package com.example.likelionhackathon.domain.auth.controller;
 
+import com.example.likelionhackathon.domain.auth.dto.AuthRequest;
 import com.example.likelionhackathon.domain.auth.entity.EmailVerification;
 import com.example.likelionhackathon.domain.auth.repository.EmailVerificationRepository;
 import com.example.likelionhackathon.domain.auth.service.EmailVerificationCodeGenerator;
 import com.example.likelionhackathon.domain.auth.service.EmailVerificationMailService;
+import com.example.likelionhackathon.domain.auth.service.EmailVerificationService;
+import com.example.likelionhackathon.global.error.ErrorCode;
+import com.example.likelionhackathon.global.error.exception.CustomException;
 import com.example.likelionhackathon.domain.user.entity.User;
 import com.example.likelionhackathon.domain.user.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -17,6 +21,11 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.OffsetDateTime;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.verify;
@@ -32,6 +41,7 @@ class EmailVerificationControllerTest {
     @Autowired private EmailVerificationRepository verificationRepository;
     @Autowired private UserRepository userRepository;
     @Autowired private PasswordEncoder passwordEncoder;
+    @Autowired private EmailVerificationService emailVerificationService;
     @MockitoBean private EmailVerificationCodeGenerator codeGenerator;
     @MockitoBean private EmailVerificationMailService mailService;
 
@@ -182,6 +192,29 @@ class EmailVerificationControllerTest {
     }
 
     @Test
+    void concurrentWrongCodesIncrementFailedAttemptsWithoutLostUpdate() throws Exception {
+        saveVerification("user@example.com", "381205", OffsetDateTime.now().plusMinutes(5));
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch start = new CountDownLatch(1);
+
+        try {
+            Future<Boolean> first = executor.submit(() -> verifyWrongCodeAfterSignal(ready, start));
+            Future<Boolean> second = executor.submit(() -> verifyWrongCodeAfterSignal(ready, start));
+            assertThat(ready.await(5, TimeUnit.SECONDS)).isTrue();
+            start.countDown();
+
+            assertThat(first.get(10, TimeUnit.SECONDS)).isTrue();
+            assertThat(second.get(10, TimeUnit.SECONDS)).isTrue();
+        } finally {
+            executor.shutdownNow();
+        }
+
+        assertThat(verificationRepository.findByEmail("user@example.com").orElseThrow()
+                .getFailedAttempts()).isEqualTo(2);
+    }
+
+    @Test
     void verifyRejectsExpiredCode() throws Exception {
         saveVerification("user@example.com", "381205", OffsetDateTime.now().minusSeconds(1));
         mockMvc.perform(post("/api/v1/auth/email-verifications/verify")
@@ -209,6 +242,18 @@ class EmailVerificationControllerTest {
     private void saveVerification(String email, String code, OffsetDateTime expiresAt) {
         verificationRepository.save(EmailVerification.create(email, passwordEncoder.encode(code), expiresAt,
                 OffsetDateTime.now().minusSeconds(1)));
+    }
+
+    private boolean verifyWrongCodeAfterSignal(CountDownLatch ready, CountDownLatch start)
+            throws InterruptedException {
+        ready.countDown();
+        if (!start.await(5, TimeUnit.SECONDS)) return false;
+        try {
+            emailVerificationService.verify(new AuthRequest.VerifyEmail("user@example.com", "927104"));
+            return false;
+        } catch (CustomException exception) {
+            return exception.getErrorCode() == ErrorCode.INVALID_VERIFICATION_CODE;
+        }
     }
 
     private String emailRequest(String email) {

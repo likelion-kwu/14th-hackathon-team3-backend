@@ -49,7 +49,8 @@ public class PasswordResetService {
 
     @Transactional(noRollbackFor = CustomException.class)
     public AuthResponse.PasswordResetVerificationResult verify(AuthRequest.VerifyPasswordReset request) {
-        PasswordResetVerification verification = find(request.email());
+        PasswordResetVerification verification = repository.findByEmailForUpdate(request.email())
+                .orElseThrow(() -> new CustomException(ErrorCode.PASSWORD_RESET_NOT_VERIFIED));
         OffsetDateTime now = OffsetDateTime.now();
         if (verification.isUsed() || verification.isVerificationExpired(now))
             throw new CustomException(ErrorCode.EXPIRED_VERIFICATION_CODE);
