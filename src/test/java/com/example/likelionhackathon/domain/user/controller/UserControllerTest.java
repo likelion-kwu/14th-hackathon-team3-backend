@@ -61,7 +61,8 @@ class UserControllerTest {
                 .andExpect(jsonPath("$.code").value("400EMAIL_NOT_VERIFIED"));
 
         verificationRepository.save(EmailVerification.create("unverified@example.com",
-                passwordEncoder.encode("123456"), OffsetDateTime.now().plusMinutes(5)));
+                passwordEncoder.encode("123456"), OffsetDateTime.now().plusMinutes(5),
+                OffsetDateTime.now().minusSeconds(1)));
         mockMvc.perform(post("/api/v1/users/signup").contentType(MediaType.APPLICATION_JSON)
                         .content(signupRequest("unverified@example.com", "password123!", "password123!")))
                 .andExpect(status().isBadRequest())
@@ -75,6 +76,56 @@ class UserControllerTest {
                         .content(signupRequest("user@example.com", "password123!", "differentPassword!")))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("400PASSWORD_MISMATCH"));
+    }
+
+    @Test
+    void signupChecksPasswordMismatchBeforeEmailVerification() throws Exception {
+        mockMvc.perform(post("/api/v1/users/signup").contentType(MediaType.APPLICATION_JSON)
+                        .content(signupRequest("unverified@example.com", "password123!", "differentPassword!")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("400PASSWORD_MISMATCH"));
+    }
+
+    @Test
+    void signupRejectsEmailVerificationOlderThanThirtyMinutes() throws Exception {
+        EmailVerification verification = EmailVerification.create("expired@example.com",
+                passwordEncoder.encode("123456"), OffsetDateTime.now().plusMinutes(5),
+                OffsetDateTime.now().minusSeconds(1));
+        verification.verify(OffsetDateTime.now().minusMinutes(31));
+        verificationRepository.save(verification);
+
+        mockMvc.perform(post("/api/v1/users/signup").contentType(MediaType.APPLICATION_JSON)
+                        .content(signupRequest("expired@example.com", "password123!", "password123!")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("400EMAIL_NOT_VERIFIED"));
+    }
+
+    @Test
+    void signupRejectsPasswordOverSeventyTwoUtf8Bytes() throws Exception {
+        String password = "a".repeat(73);
+        mockMvc.perform(post("/api/v1/users/signup").contentType(MediaType.APPLICATION_JSON)
+                        .content(signupRequest("user@example.com", password, password)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("400INVALID_INPUT_VALUE"));
+
+        String multibytePassword = "가".repeat(25);
+        mockMvc.perform(post("/api/v1/users/signup").contentType(MediaType.APPLICATION_JSON)
+                        .content(signupRequest("user@example.com", multibytePassword, multibytePassword)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("400INVALID_INPUT_VALUE"));
+    }
+
+    @Test
+    void signupAcceptsPasswordOfExactlySeventyTwoUtf8Bytes() throws Exception {
+        saveVerifiedEmail("boundary@example.com");
+        String password = "a".repeat(72);
+
+        mockMvc.perform(post("/api/v1/users/signup").contentType(MediaType.APPLICATION_JSON)
+                        .content(signupRequest("boundary@example.com", password, password)))
+                .andExpect(status().isCreated());
+
+        assertThat(passwordEncoder.matches(password, userRepository.findByEmail("boundary@example.com")
+                .orElseThrow().getPassword())).isTrue();
     }
 
     @Test
@@ -111,7 +162,8 @@ class UserControllerTest {
 
     private void saveVerifiedEmail(String email) {
         EmailVerification verification = EmailVerification.create(email,
-                passwordEncoder.encode("123456"), OffsetDateTime.now().plusMinutes(5));
+                passwordEncoder.encode("123456"), OffsetDateTime.now().plusMinutes(5),
+                OffsetDateTime.now().minusSeconds(1));
         verification.verify(OffsetDateTime.now());
         verificationRepository.save(verification);
     }

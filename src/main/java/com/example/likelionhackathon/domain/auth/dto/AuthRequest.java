@@ -1,5 +1,6 @@
 package com.example.likelionhackathon.domain.auth.dto;
 
+import com.example.likelionhackathon.global.validation.Utf8ByteLength;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
@@ -41,6 +42,8 @@ public final class AuthRequest {
     public record ResetPassword(
             @NotBlank @Email String email,
             @NotBlank String resetToken,
-            @NotBlank @Size(min = 8) String newPassword,
+            @NotBlank @Size(min = 8)
+            @Utf8ByteLength(max = 72, message = "비밀번호는 UTF-8 기준 72바이트 이하여야 합니다.")
+            String newPassword,
             @NotBlank String newPasswordConfirm) {}
 }

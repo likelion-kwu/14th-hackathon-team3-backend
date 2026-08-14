@@ -56,6 +56,27 @@ class EmailVerificationControllerTest {
         assertThat(saved.getEncodedVerificationCode()).isNotEqualTo("004821");
         assertThat(passwordEncoder.matches("004821", saved.getEncodedVerificationCode())).isTrue();
         assertThat(saved.isVerified()).isFalse();
+        assertThat(saved.getFailedAttempts()).isZero();
+        assertThat(saved.getResendAvailableAt()).isAfter(OffsetDateTime.now());
+        verify(mailService).sendVerificationCode("user@example.com", "004821");
+    }
+
+    @Test
+    void requestRejectsResendDuringCooldownWithoutSendingMail() throws Exception {
+        when(codeGenerator.generate()).thenReturn("004821");
+        mockMvc.perform(post("/api/v1/auth/email-verifications")
+                        .contentType(MediaType.APPLICATION_JSON).content(emailRequest("user@example.com")))
+                .andExpect(status().isOk());
+
+        String encodedCode = verificationRepository.findByEmail("user@example.com").orElseThrow()
+                .getEncodedVerificationCode();
+        mockMvc.perform(post("/api/v1/auth/email-verifications")
+                        .contentType(MediaType.APPLICATION_JSON).content(emailRequest("user@example.com")))
+                .andExpect(status().isTooManyRequests())
+                .andExpect(jsonPath("$.code").value("429VERIFICATION_REQUEST_TOO_FREQUENT"));
+
+        assertThat(verificationRepository.findByEmail("user@example.com").orElseThrow()
+                .getEncodedVerificationCode()).isEqualTo(encodedCode);
         verify(mailService).sendVerificationCode("user@example.com", "004821");
     }
 
@@ -80,8 +101,11 @@ class EmailVerificationControllerTest {
     @Test
     void reissueInvalidatesOldCodeAndResetsVerification() throws Exception {
         EmailVerification existing = EmailVerification.create("user@example.com",
-                passwordEncoder.encode("111111"), OffsetDateTime.now().plusMinutes(1));
+                passwordEncoder.encode("111111"), OffsetDateTime.now().plusMinutes(1),
+                OffsetDateTime.now().minusSeconds(1));
         existing.verify(OffsetDateTime.now());
+        existing.registerFailedAttempt();
+        existing.registerFailedAttempt();
         OffsetDateTime oldExpiresAt = existing.getExpiresAt();
         verificationRepository.save(existing);
         when(codeGenerator.generate()).thenReturn("222222");
@@ -96,6 +120,8 @@ class EmailVerificationControllerTest {
         assertThat(updated.getExpiresAt()).isAfter(oldExpiresAt);
         assertThat(updated.isVerified()).isFalse();
         assertThat(updated.getVerifiedAt()).isNull();
+        assertThat(updated.getFailedAttempts()).isZero();
+        assertThat(updated.getResendAvailableAt()).isAfter(OffsetDateTime.now());
 
         mockMvc.perform(post("/api/v1/auth/email-verifications/verify")
                         .contentType(MediaType.APPLICATION_JSON).content(verifyRequest("user@example.com", "111111")))
@@ -125,6 +151,34 @@ class EmailVerificationControllerTest {
                         .contentType(MediaType.APPLICATION_JSON).content(verifyRequest("user@example.com", "927104")))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("400INVALID_VERIFICATION_CODE"));
+        assertThat(verificationRepository.findByEmail("user@example.com").orElseThrow()
+                .getFailedAttempts()).isEqualTo(1);
+    }
+
+    @Test
+    void fifthWrongCodeInvalidatesCurrentCodeUntilReissue() throws Exception {
+        saveVerification("user@example.com", "381205", OffsetDateTime.now().plusMinutes(5));
+
+        for (int attempt = 1; attempt <= 4; attempt++) {
+            mockMvc.perform(post("/api/v1/auth/email-verifications/verify")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(verifyRequest("user@example.com", "927104")))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.code").value("400INVALID_VERIFICATION_CODE"));
+        }
+        mockMvc.perform(post("/api/v1/auth/email-verifications/verify")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(verifyRequest("user@example.com", "927104")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("400VERIFICATION_ATTEMPTS_EXCEEDED"));
+
+        EmailVerification locked = verificationRepository.findByEmail("user@example.com").orElseThrow();
+        assertThat(locked.getFailedAttempts()).isEqualTo(5);
+        mockMvc.perform(post("/api/v1/auth/email-verifications/verify")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(verifyRequest("user@example.com", "381205")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("400VERIFICATION_ATTEMPTS_EXCEEDED"));
     }
 
     @Test
@@ -153,7 +207,8 @@ class EmailVerificationControllerTest {
     }
 
     private void saveVerification(String email, String code, OffsetDateTime expiresAt) {
-        verificationRepository.save(EmailVerification.create(email, passwordEncoder.encode(code), expiresAt));
+        verificationRepository.save(EmailVerification.create(email, passwordEncoder.encode(code), expiresAt,
+                OffsetDateTime.now().minusSeconds(1)));
     }
 
     private String emailRequest(String email) {

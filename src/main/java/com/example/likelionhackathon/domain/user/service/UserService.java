@@ -13,9 +13,12 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.OffsetDateTime;
+
 @Service
 @RequiredArgsConstructor
 public class UserService {
+    private static final long VERIFIED_EMAIL_VALID_MINUTES = 30;
 
     private final UserRepository userRepository;
     private final EmailVerificationRepository emailVerificationRepository;
@@ -23,17 +26,18 @@ public class UserService {
 
     @Transactional
     public UserResponse.Signup signup(UserRequest.Signup request) {
+        if (!request.password().equals(request.passwordConfirm())) {
+            throw new CustomException(ErrorCode.PASSWORD_MISMATCH);
+        }
+
         if (userRepository.existsByEmail(request.email())) {
             throw new CustomException(ErrorCode.DUPLICATE_EMAIL);
         }
 
         EmailVerification emailVerification = emailVerificationRepository.findByEmail(request.email())
-                .filter(EmailVerification::isVerified)
+                .filter(verification -> verification.isSignupAvailable(
+                        OffsetDateTime.now(), VERIFIED_EMAIL_VALID_MINUTES))
                 .orElseThrow(() -> new CustomException(ErrorCode.EMAIL_NOT_VERIFIED));
-
-        if (!request.password().equals(request.passwordConfirm())) {
-            throw new CustomException(ErrorCode.PASSWORD_MISMATCH);
-        }
 
         String encodedPassword = passwordEncoder.encode(request.password());
         User user = User.create(

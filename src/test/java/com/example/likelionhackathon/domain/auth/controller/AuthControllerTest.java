@@ -3,6 +3,7 @@ package com.example.likelionhackathon.domain.auth.controller;
 import com.example.likelionhackathon.domain.user.entity.User;
 import com.example.likelionhackathon.domain.user.repository.UserRepository;
 import com.example.likelionhackathon.global.security.jwt.JwtTokenProvider;
+import com.jayway.jsonpath.JsonPath;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -44,9 +45,7 @@ class AuthControllerTest {
                 .andExpect(jsonPath("$.data.accessToken").isNotEmpty())
                 .andExpect(result -> {
                     String response = result.getResponse().getContentAsString();
-                    String marker = "\"accessToken\":\"";
-                    int start = response.indexOf(marker) + marker.length();
-                    String token = response.substring(start, response.indexOf('"', start));
+                    String token = JsonPath.read(response, "$.data.accessToken");
                     org.assertj.core.api.Assertions.assertThat(jwtTokenProvider.getUserId(token)).isEqualTo(userId);
                 });
     }

@@ -26,4 +26,24 @@ class JwtTokenProviderTest {
         long lifetime = Duration.between(provider.getIssuedAt(token), provider.getExpiration(token)).toMillis();
         assertThat(lifetime).isCloseTo(EXPIRATION_MS, org.assertj.core.data.Offset.offset(1_000L));
     }
+
+    @Test
+    void tokenSignedWithDifferentSecretIsInvalid() {
+        JwtTokenProvider otherProvider = new JwtTokenProvider(
+                "QW5vdGhlci10ZXN0LW9ubHktMzItYnl0ZS1qd3Qtc2VjcmV0IQ==", EXPIRATION_MS);
+        assertThat(provider.isValid(otherProvider.createAccessToken(42L))).isFalse();
+    }
+
+    @Test
+    void malformedTokenIsInvalid() {
+        assertThat(provider.isValid("not-a-jwt")).isFalse();
+    }
+
+    @Test
+    void expiredTokenIsInvalid() throws InterruptedException {
+        JwtTokenProvider shortLivedProvider = new JwtTokenProvider(TEST_SECRET, 1L);
+        String token = shortLivedProvider.createAccessToken(42L);
+        Thread.sleep(10L);
+        assertThat(shortLivedProvider.isValid(token)).isFalse();
+    }
 }

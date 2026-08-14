@@ -17,6 +17,7 @@ import java.time.OffsetDateTime;
 @Service
 @RequiredArgsConstructor
 public class PasswordResetService {
+    private static final long RESEND_COOLDOWN_SECONDS = 60;
     private final PasswordResetVerificationRepository repository;
     private final UserRepository userRepository;
     private final EmailVerificationCodeGenerator codeGenerator;
@@ -27,24 +28,38 @@ public class PasswordResetService {
     @Transactional
     public void request(AuthRequest.PasswordResetRequest request) {
         if (!userRepository.existsByEmail(request.email())) return;
+        OffsetDateTime now = OffsetDateTime.now();
+        PasswordResetVerification existing = repository.findByEmail(request.email()).orElse(null);
+        if (existing != null && !existing.canResend(now)) return;
+
         String code = codeGenerator.generate();
         String encodedCode = passwordEncoder.encode(code);
-        OffsetDateTime expiresAt = OffsetDateTime.now().plusMinutes(5);
-        PasswordResetVerification verification = repository.findByEmail(request.email())
-                .map(v -> { v.reissue(encodedCode, expiresAt); return v; })
-                .orElseGet(() -> PasswordResetVerification.create(request.email(), encodedCode, expiresAt));
+        OffsetDateTime expiresAt = now.plusMinutes(5);
+        OffsetDateTime resendAvailableAt = now.plusSeconds(RESEND_COOLDOWN_SECONDS);
+        PasswordResetVerification verification;
+        if (existing == null) {
+            verification = PasswordResetVerification.create(request.email(), encodedCode, expiresAt, resendAvailableAt);
+        } else {
+            existing.reissue(encodedCode, expiresAt, resendAvailableAt);
+            verification = existing;
+        }
         repository.save(verification);
         mailService.sendVerificationCode(request.email(), code);
     }
 
-    @Transactional
+    @Transactional(noRollbackFor = CustomException.class)
     public AuthResponse.PasswordResetVerificationResult verify(AuthRequest.VerifyPasswordReset request) {
         PasswordResetVerification verification = find(request.email());
         OffsetDateTime now = OffsetDateTime.now();
         if (verification.isUsed() || verification.isVerificationExpired(now))
             throw new CustomException(ErrorCode.EXPIRED_VERIFICATION_CODE);
-        if (!passwordEncoder.matches(request.verificationCode(), verification.getEncodedVerificationCode()))
+        if (verification.hasExceededMaxAttempts())
+            throw new CustomException(ErrorCode.VERIFICATION_ATTEMPTS_EXCEEDED);
+        if (!passwordEncoder.matches(request.verificationCode(), verification.getEncodedVerificationCode())) {
+            if (verification.registerFailedAttempt())
+                throw new CustomException(ErrorCode.VERIFICATION_ATTEMPTS_EXCEEDED);
             throw new CustomException(ErrorCode.INVALID_VERIFICATION_CODE);
+        }
         String token = tokenGenerator.generate();
         verification.completeVerification(now, passwordEncoder.encode(token), now.plusMinutes(10));
         return new AuthResponse.PasswordResetVerificationResult(token);

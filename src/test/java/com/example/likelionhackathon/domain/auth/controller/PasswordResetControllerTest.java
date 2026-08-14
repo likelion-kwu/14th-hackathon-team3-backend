@@ -47,6 +47,20 @@ class PasswordResetControllerTest {
         request("user@example.com").andExpect(status().isOk());
         PasswordResetVerification saved = repository.findByEmail("user@example.com").orElseThrow();
         assertThat(passwordEncoder.matches("004821", saved.getEncodedVerificationCode())).isTrue();
+        assertThat(saved.getFailedAttempts()).isZero();
+        assertThat(saved.getResendAvailableAt()).isAfter(OffsetDateTime.now());
+        verify(mailService).sendVerificationCode("user@example.com", "004821");
+    }
+
+    @Test void registeredEmailCooldownReturnsSameSuccessWithoutReissue() throws Exception {
+        when(codeGenerator.generate()).thenReturn("004821");
+        request("user@example.com").andExpect(status().isOk());
+        String encodedCode = repository.findByEmail("user@example.com").orElseThrow().getEncodedVerificationCode();
+
+        request("user@example.com").andExpect(status().isOk());
+
+        assertThat(repository.findByEmail("user@example.com").orElseThrow()
+                .getEncodedVerificationCode()).isEqualTo(encodedCode);
         verify(mailService).sendVerificationCode("user@example.com", "004821");
     }
 
@@ -58,6 +72,8 @@ class PasswordResetControllerTest {
 
     @Test void reissueInvalidatesOldCodeAndToken() throws Exception {
         PasswordResetVerification v = verified("111111", "old-token");
+        v.registerFailedAttempt();
+        v.registerFailedAttempt();
         repository.save(v);
         when(codeGenerator.generate()).thenReturn("222222");
         request("user@example.com").andExpect(status().isOk());
@@ -65,10 +81,12 @@ class PasswordResetControllerTest {
         assertThat(updated.isVerified()).isFalse();
         assertThat(updated.getEncodedResetToken()).isNull();
         assertThat(passwordEncoder.matches("222222", updated.getEncodedVerificationCode())).isTrue();
+        assertThat(updated.getFailedAttempts()).isZero();
+        assertThat(updated.getResendAvailableAt()).isAfter(OffsetDateTime.now());
     }
 
     @Test void verifyReturnsTokenAndStoresOnlyHash() throws Exception {
-        repository.save(PasswordResetVerification.create("user@example.com", passwordEncoder.encode("381205"), OffsetDateTime.now().plusMinutes(5)));
+        repository.save(createVerification("381205", OffsetDateTime.now().plusMinutes(5)));
         when(tokenGenerator.generate()).thenReturn("safe-reset-token");
         verifyCode("381205").andExpect(status().isOk()).andExpect(jsonPath("$.data.resetToken").value("safe-reset-token"));
         PasswordResetVerification saved = repository.findByEmail("user@example.com").orElseThrow();
@@ -78,9 +96,10 @@ class PasswordResetControllerTest {
     }
 
     @Test void wrongAndExpiredVerificationCodesFail() throws Exception {
-        repository.save(PasswordResetVerification.create("user@example.com", passwordEncoder.encode("381205"), OffsetDateTime.now().plusMinutes(5)));
+        repository.save(createVerification("381205", OffsetDateTime.now().plusMinutes(5)));
         verifyCode("927104").andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("400INVALID_VERIFICATION_CODE"));
         PasswordResetVerification saved = repository.findByEmail("user@example.com").orElseThrow();
+        assertThat(saved.getFailedAttempts()).isEqualTo(1);
         ReflectionTestUtils.setField(saved, "verificationExpiresAt", OffsetDateTime.now().minusSeconds(1));
         repository.save(saved);
         verifyCode("381205").andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("400EXPIRED_VERIFICATION_CODE"));
@@ -115,10 +134,47 @@ class PasswordResetControllerTest {
                 .andExpect(jsonPath("$.code").value("400PASSWORD_MISMATCH"));
     }
 
+    @Test void fifthWrongVerificationCodeInvalidatesCurrentCode() throws Exception {
+        repository.save(createVerification("381205", OffsetDateTime.now().plusMinutes(5)));
+
+        for (int attempt = 1; attempt <= 4; attempt++) {
+            verifyCode("927104").andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.code").value("400INVALID_VERIFICATION_CODE"));
+        }
+        verifyCode("927104").andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("400VERIFICATION_ATTEMPTS_EXCEEDED"));
+
+        assertThat(repository.findByEmail("user@example.com").orElseThrow().getFailedAttempts()).isEqualTo(5);
+        verifyCode("381205").andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("400VERIFICATION_ATTEMPTS_EXCEEDED"));
+        verifyNoInteractions(tokenGenerator);
+    }
+
+    @Test void resetRejectsNewPasswordOverSeventyTwoUtf8Bytes() throws Exception {
+        repository.save(verified("381205", "reset-token"));
+        String password = "가".repeat(25);
+        reset("reset-token", password, password).andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("400INVALID_INPUT_VALUE"));
+        assertThat(passwordEncoder.matches("oldPassword!", userRepository.findByEmail("user@example.com")
+                .orElseThrow().getPassword())).isTrue();
+    }
+
+    @Test void resetAcceptsNewPasswordOfExactlySeventyTwoUtf8Bytes() throws Exception {
+        repository.save(verified("381205", "reset-token"));
+        String password = "a".repeat(72);
+        reset("reset-token", password, password).andExpect(status().isOk());
+        assertThat(passwordEncoder.matches(password, userRepository.findByEmail("user@example.com")
+                .orElseThrow().getPassword())).isTrue();
+    }
+
     private PasswordResetVerification verified(String code, String token) {
-        PasswordResetVerification v = PasswordResetVerification.create("user@example.com", passwordEncoder.encode(code), OffsetDateTime.now().plusMinutes(5));
+        PasswordResetVerification v = createVerification(code, OffsetDateTime.now().plusMinutes(5));
         v.completeVerification(OffsetDateTime.now(), passwordEncoder.encode(token), OffsetDateTime.now().plusMinutes(10));
         return v;
+    }
+    private PasswordResetVerification createVerification(String code, OffsetDateTime expiresAt) {
+        return PasswordResetVerification.create("user@example.com", passwordEncoder.encode(code), expiresAt,
+                OffsetDateTime.now().minusSeconds(1));
     }
     private org.springframework.test.web.servlet.ResultActions request(String email) throws Exception { return mockMvc.perform(post("/api/v1/auth/password-reset/request").contentType(MediaType.APPLICATION_JSON).content("{\"email\":\""+email+"\"}")); }
     private org.springframework.test.web.servlet.ResultActions verifyCode(String code) throws Exception { return mockMvc.perform(post("/api/v1/auth/password-reset/verify").contentType(MediaType.APPLICATION_JSON).content("{\"email\":\"user@example.com\",\"verificationCode\":\""+code+"\"}")); }

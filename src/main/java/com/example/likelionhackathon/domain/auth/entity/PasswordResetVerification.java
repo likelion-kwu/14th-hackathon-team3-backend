@@ -12,6 +12,8 @@ import java.time.OffsetDateTime;
 @Table(name = "password_reset_verifications")
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class PasswordResetVerification {
+    private static final int MAX_FAILED_ATTEMPTS = 5;
+
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
     @Column(nullable = false, unique = true)
@@ -27,23 +29,39 @@ public class PasswordResetVerification {
     private OffsetDateTime resetTokenExpiresAt;
     @Column(nullable = false)
     private boolean used;
+    @Column(nullable = false)
+    private int failedAttempts;
+    @Column(nullable = false)
+    private OffsetDateTime resendAvailableAt;
 
-    public static PasswordResetVerification create(String email, String encodedCode, OffsetDateTime expiresAt) {
+    public static PasswordResetVerification create(String email, String encodedCode, OffsetDateTime expiresAt,
+                                                   OffsetDateTime resendAvailableAt) {
         PasswordResetVerification verification = new PasswordResetVerification();
         verification.email = email;
-        verification.reissue(encodedCode, expiresAt);
+        verification.reissue(encodedCode, expiresAt, resendAvailableAt);
         return verification;
     }
 
-    public void reissue(String encodedCode, OffsetDateTime expiresAt) {
+    public void reissue(String encodedCode, OffsetDateTime expiresAt, OffsetDateTime resendAvailableAt) {
         encodedVerificationCode = encodedCode;
         verificationExpiresAt = expiresAt;
+        this.resendAvailableAt = resendAvailableAt;
+        failedAttempts = 0;
         verified = false;
         verifiedAt = null;
         encodedResetToken = null;
         resetTokenExpiresAt = null;
         used = false;
     }
+
+    public boolean canResend(OffsetDateTime now) { return !now.isBefore(resendAvailableAt); }
+
+    public boolean registerFailedAttempt() {
+        if (failedAttempts < MAX_FAILED_ATTEMPTS) failedAttempts++;
+        return failedAttempts >= MAX_FAILED_ATTEMPTS;
+    }
+
+    public boolean hasExceededMaxAttempts() { return failedAttempts >= MAX_FAILED_ATTEMPTS; }
 
     public boolean isVerificationExpired(OffsetDateTime now) { return now.isAfter(verificationExpiresAt); }
 

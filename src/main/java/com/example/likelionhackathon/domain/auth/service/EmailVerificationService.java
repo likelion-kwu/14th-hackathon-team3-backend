@@ -18,6 +18,7 @@ import java.time.OffsetDateTime;
 @RequiredArgsConstructor
 public class EmailVerificationService {
     private static final long EXPIRATION_MINUTES = 5;
+    private static final long RESEND_COOLDOWN_SECONDS = 60;
 
     private final EmailVerificationRepository verificationRepository;
     private final UserRepository userRepository;
@@ -31,21 +32,29 @@ public class EmailVerificationService {
             throw new CustomException(ErrorCode.DUPLICATE_EMAIL);
         }
 
+        OffsetDateTime now = OffsetDateTime.now();
+        EmailVerification existing = verificationRepository.findByEmail(request.email()).orElse(null);
+        if (existing != null && !existing.canResend(now)) {
+            throw new CustomException(ErrorCode.VERIFICATION_REQUEST_TOO_FREQUENT);
+        }
+
         String code = codeGenerator.generate();
         String encodedCode = passwordEncoder.encode(code);
-        OffsetDateTime expiresAt = OffsetDateTime.now().plusMinutes(EXPIRATION_MINUTES);
-        EmailVerification verification = verificationRepository.findByEmail(request.email())
-                .map(existing -> {
-                    existing.reissue(encodedCode, expiresAt);
-                    return existing;
-                })
-                .orElseGet(() -> EmailVerification.create(request.email(), encodedCode, expiresAt));
+        OffsetDateTime expiresAt = now.plusMinutes(EXPIRATION_MINUTES);
+        OffsetDateTime resendAvailableAt = now.plusSeconds(RESEND_COOLDOWN_SECONDS);
+        EmailVerification verification;
+        if (existing == null) {
+            verification = EmailVerification.create(request.email(), encodedCode, expiresAt, resendAvailableAt);
+        } else {
+            existing.reissue(encodedCode, expiresAt, resendAvailableAt);
+            verification = existing;
+        }
 
         verificationRepository.save(verification);
         mailService.sendVerificationCode(request.email(), code);
     }
 
-    @Transactional
+    @Transactional(noRollbackFor = CustomException.class)
     public AuthResponse.EmailVerificationResult verify(AuthRequest.VerifyEmail request) {
         EmailVerification verification = verificationRepository.findByEmail(request.email())
                 .orElseThrow(() -> new CustomException(ErrorCode.EMAIL_VERIFICATION_NOT_FOUND));
@@ -54,7 +63,13 @@ public class EmailVerificationService {
         if (verification.isExpired(now)) {
             throw new CustomException(ErrorCode.EXPIRED_VERIFICATION_CODE);
         }
+        if (verification.hasExceededMaxAttempts()) {
+            throw new CustomException(ErrorCode.VERIFICATION_ATTEMPTS_EXCEEDED);
+        }
         if (!passwordEncoder.matches(request.verificationCode(), verification.getEncodedVerificationCode())) {
+            if (verification.registerFailedAttempt()) {
+                throw new CustomException(ErrorCode.VERIFICATION_ATTEMPTS_EXCEEDED);
+            }
             throw new CustomException(ErrorCode.INVALID_VERIFICATION_CODE);
         }
 
