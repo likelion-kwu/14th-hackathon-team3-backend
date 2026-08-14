@@ -4,8 +4,10 @@ import com.example.likelionhackathon.global.common.ApiResponse;
 import com.example.likelionhackathon.global.error.exception.CustomException;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -45,5 +47,20 @@ class GlobalExceptionHandlerTest {
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR);
         assertThat(response.getBody()).isNotNull();
         assertThat(response.getBody().getCode()).isEqualTo("500INTERNAL_SERVER_ERROR");
+    }
+
+    @Test
+    void 존재하지_않는_리소스는_404_명세_코드로_응답한다() {
+        NoResourceFoundException exception = new NoResourceFoundException(
+                HttpMethod.GET,
+                "/missing",
+                "No static resource"
+        );
+
+        ResponseEntity<ApiResponse<Void>> response = handler.handleNoResourceFound(exception);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(response.getBody()).isNotNull();
+        assertThat(response.getBody().getCode()).isEqualTo("404RESOURCE_NOT_FOUND");
     }
 }
