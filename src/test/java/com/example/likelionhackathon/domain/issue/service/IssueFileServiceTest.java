@@ -70,6 +70,25 @@ class IssueFileServiceTest {
     }
 
     @Test
+    void downloadRejectsPathTraversal() {
+        assertThatThrownBy(() -> issueFileService.download("../../etc/passwd"))
+                .isInstanceOf(CustomException.class)
+                .hasMessage("파일명이 올바르지 않습니다.")
+                .extracting(e -> ((CustomException) e).getErrorCode())
+                .isEqualTo(ErrorCode.ISSUE_INVALID_INPUT);
+
+        verify(fileStoragePort, never()).load(any());
+    }
+
+    @Test
+    void originalNameStripsStoredPrefix() {
+        assertThat(issueFileService.originalNameOf("14a4b22d20f740d7946859e77b990403_QA_Result_v2.pdf"))
+                .isEqualTo("QA_Result_v2.pdf");
+        assertThat(issueFileService.originalNameOf("접두사없는파일.pdf"))
+                .isEqualTo("접두사없는파일.pdf");
+    }
+
+    @Test
     void returnsStoredFileInfo() {
         MultipartFile file = new MockMultipartFile("files", "QA_Result_v2.pdf", null, new byte[]{1, 2, 3});
         when(fileStoragePort.store(file)).thenReturn(

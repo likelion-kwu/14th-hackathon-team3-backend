@@ -8,6 +8,7 @@ import com.example.likelionhackathon.domain.cycle.service.CycleIssuePort.IssueSt
 import com.example.likelionhackathon.domain.issue.dto.IssueRequest;
 import com.example.likelionhackathon.domain.issue.dto.IssueResponse;
 import com.example.likelionhackathon.domain.issue.entity.Issue;
+import com.example.likelionhackathon.domain.issue.entity.IssueAttachment;
 import com.example.likelionhackathon.domain.issue.entity.IssueChecklistItem;
 import com.example.likelionhackathon.domain.issue.entity.IssueEnums.IssuePriority;
 import com.example.likelionhackathon.domain.issue.entity.IssueEnums.IssueStatus;
@@ -18,6 +19,7 @@ import com.example.likelionhackathon.global.error.exception.CustomException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -99,6 +101,27 @@ class IssueServiceTest {
                 .isEqualTo(ErrorCode.PROJECT_ACCESS_DENIED);
 
         verify(issueRepository, never()).delete(any(Issue.class));
+    }
+
+    @Test
+    void attachmentKeepsOriginalFileNameWithoutStoredPrefix() {
+        when(cycleRepository.findById(CYCLE_ID)).thenReturn(Optional.of(cycle()));
+        when(issueMemberPort.isProjectMember(CYCLE_ID, ASSIGNEE_ID)).thenReturn(true);
+        when(issueRepository.save(any(Issue.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        IssueRequest.Create request = new IssueRequest.Create(
+                CYCLE_ID, "제목", IssuePriority.HIGH, "설명", null, ASSIGNEE_ID,
+                LocalDate.of(2026, 8, 6),
+                List.of("http://localhost:8080/api/v1/issues/files/"
+                        + "dccaa16257b34b1f9fc1787af48d7bd5_QA_%EA%B2%B0%EA%B3%BC.pdf"));
+
+        issueService.create(request);
+
+        ArgumentCaptor<Issue> captor = ArgumentCaptor.forClass(Issue.class);
+        verify(issueRepository).save(captor.capture());
+        assertThat(captor.getValue().getAttachments())
+                .extracting(IssueAttachment::getFileName)
+                .containsExactly("QA_결과.pdf");
     }
 
     @Test
