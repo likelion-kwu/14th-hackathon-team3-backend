@@ -26,6 +26,8 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
@@ -34,6 +36,8 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 @Service
@@ -256,10 +260,19 @@ public class IssueService {
         return attachments;
     }
 
+    /** 저장 파일명 앞에 붙는 32자리 UUID 접두사. 응답에는 원본 이름만 내보낸다. */
+    private static final Pattern STORED_NAME_PREFIX = Pattern.compile("^[0-9a-f]{32}_(.+)$");
+
     private String extractFileName(String fileUrl) {
         int lastSlash = fileUrl.lastIndexOf('/');
         String fileName = (lastSlash < 0) ? fileUrl : fileUrl.substring(lastSlash + 1);
-        return fileName.isBlank() ? fileUrl : fileName;
+        if (fileName.isBlank()) {
+            return fileUrl;
+        }
+
+        fileName = URLDecoder.decode(fileName, StandardCharsets.UTF_8);
+        Matcher matcher = STORED_NAME_PREFIX.matcher(fileName);
+        return matcher.matches() ? matcher.group(1) : fileName;
     }
 
     private Specification<Issue> buildSpecification(

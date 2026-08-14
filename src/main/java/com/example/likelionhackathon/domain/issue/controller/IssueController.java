@@ -8,6 +8,8 @@ import com.example.likelionhackathon.global.common.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import org.springframework.core.io.Resource;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -23,6 +25,8 @@ import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 @Tag(name = "이슈")
@@ -103,6 +107,19 @@ public class IssueController {
         List<IssueResponse.UploadedFile> response = issueFileService.upload(files);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.created("리소스 생성이 완료되었습니다.", response));
+    }
+
+    @Operation(summary = "첨부파일 다운로드")
+    @GetMapping("/issues/files/{storedName}")
+    public ResponseEntity<Resource> downloadFile(@PathVariable String storedName) {
+        Resource resource = issueFileService.download(storedName);
+        String downloadName = URLEncoder.encode(
+                issueFileService.originalNameOf(storedName), StandardCharsets.UTF_8).replace("+", "%20");
+
+        return ResponseEntity.ok()
+                .contentType(MediaType.APPLICATION_OCTET_STREAM)
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename*=UTF-8''" + downloadName)
+                .body(resource);
     }
 
     @Operation(summary = "이슈 삭제")

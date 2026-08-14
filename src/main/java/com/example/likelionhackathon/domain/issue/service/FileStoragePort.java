@@ -1,5 +1,6 @@
 package com.example.likelionhackathon.domain.issue.service;
 
+import org.springframework.core.io.Resource;
 import org.springframework.web.multipart.MultipartFile;
 
 /**
@@ -12,6 +13,11 @@ import org.springframework.web.multipart.MultipartFile;
 public interface FileStoragePort {
 
     StoredFile store(MultipartFile file);
+
+    /**
+     * 저장된 파일을 읽어온다. 다운로드 엔드포인트가 사용한다.
+     */
+    Resource load(String storedName);
 
     record StoredFile(String fileName, Long fileSize, String fileUrl) {
     }
