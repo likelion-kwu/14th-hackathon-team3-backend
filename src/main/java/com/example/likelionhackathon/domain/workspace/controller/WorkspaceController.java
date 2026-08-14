@@ -77,6 +77,17 @@ public class WorkspaceController {
         );
     }
 
+    @Operation(summary = "워크스페이스 조직도 조회")
+    @GetMapping("/workspaces/{workspaceId}/organization-chart")
+    public ApiResponse<WorkspaceResponse.OrganizationChart> getOrganizationChart(
+            @PathVariable Long workspaceId
+    ) {
+        return ApiResponse.success(
+                "조직도를 조회했습니다.",
+                workspaceService.getOrganizationChart(workspaceId)
+        );
+    }
+
     @Operation(summary = "내 워크스페이스 프로필 조회")
     @GetMapping("/workspaces/{workspaceId}/members/me/profile")
     public ApiResponse<WorkspaceResponse.Profile> getMyProfile(@PathVariable Long workspaceId) {

@@ -1,5 +1,6 @@
 package com.example.likelionhackathon.domain.workspace.dto;
 
+import com.example.likelionhackathon.domain.user.entity.UserEnums.ActivityStatus;
 import com.example.likelionhackathon.domain.workspace.entity.WorkspaceEnums.WorkspaceMemberStatus;
 import com.example.likelionhackathon.domain.workspace.entity.WorkspaceEnums.WorkspaceRole;
 import com.example.likelionhackathon.domain.workspace.entity.WorkspaceEnums.WorkspaceStatus;
@@ -110,6 +111,27 @@ public final class WorkspaceResponse {
             String companyName,
             String teamName,
             String jobTitle
+    ) {
+    }
+
+    public record OrganizationChart(
+            Long workspaceId,
+            List<OrganizationTeam> teams
+    ) {
+    }
+
+    public record OrganizationTeam(
+            String teamName,
+            List<OrganizationMember> members
+    ) {
+    }
+
+    public record OrganizationMember(
+            Long memberId,
+            String name,
+            String companyName,
+            String jobTitle,
+            ActivityStatus activityStatus
     ) {
     }
 }
