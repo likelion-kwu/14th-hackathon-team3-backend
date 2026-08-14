@@ -4,6 +4,8 @@ import com.example.likelionhackathon.global.error.ErrorCode;
 import com.example.likelionhackathon.global.error.exception.CustomException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -25,12 +27,15 @@ import java.util.UUID;
 @Service
 public class LocalFileStorage implements FileStoragePort {
 
+    /** 다운로드 엔드포인트 경로. IssueController 의 매핑과 맞춰야 한다. */
+    private static final String DOWNLOAD_PATH = "/api/v1/issues/files/";
+
     private final Path uploadDirectory;
     private final String publicBaseUrl;
 
     public LocalFileStorage(
             @Value("${file.upload-dir:uploads}") String uploadDir,
-            @Value("${file.public-base-url:http://localhost:8080/files}") String publicBaseUrl
+            @Value("${file.public-base-url:http://localhost:8080}") String publicBaseUrl
     ) {
         this.uploadDirectory = Paths.get(uploadDir).toAbsolutePath().normalize();
         this.publicBaseUrl = publicBaseUrl.endsWith("/")
@@ -56,10 +61,22 @@ public class LocalFileStorage implements FileStoragePort {
                 Files.copy(inputStream, target, StandardCopyOption.REPLACE_EXISTING);
             }
 
-            return new StoredFile(originalName, file.getSize(), publicBaseUrl + "/" + storedName);
+            return new StoredFile(originalName, file.getSize(), publicBaseUrl + DOWNLOAD_PATH + storedName);
         } catch (IOException e) {
             log.error("파일 저장에 실패했습니다. fileName={}", originalName, e);
             throw new CustomException(ErrorCode.INTERNAL_SERVER_ERROR, "파일 저장에 실패했습니다.");
         }
+    }
+
+    @Override
+    public Resource load(String storedName) {
+        Path target = uploadDirectory.resolve(storedName).normalize();
+
+        // 경로 조작으로 업로드 디렉터리 밖 파일을 읽는 것을 막는다.
+        if (!target.startsWith(uploadDirectory) || !Files.isReadable(target)) {
+            throw new CustomException(ErrorCode.ISSUE_NOT_FOUND, "첨부파일을 찾을 수 없습니다.");
+        }
+
+        return new FileSystemResource(target);
     }
 }

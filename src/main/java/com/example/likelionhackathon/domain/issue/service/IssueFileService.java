@@ -4,6 +4,7 @@ import com.example.likelionhackathon.domain.issue.dto.IssueResponse;
 import com.example.likelionhackathon.global.error.ErrorCode;
 import com.example.likelionhackathon.global.error.exception.CustomException;
 import lombok.RequiredArgsConstructor;
+import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -38,6 +39,23 @@ public class IssueFileService {
                 .map(stored -> new IssueResponse.UploadedFile(
                         stored.fileName(), stored.fileSize(), stored.fileUrl()))
                 .toList();
+    }
+
+    public Resource download(String storedName) {
+        if (storedName == null || storedName.isBlank() || storedName.contains("/") || storedName.contains("\\")) {
+            throw new CustomException(ErrorCode.ISSUE_INVALID_INPUT, "파일명이 올바르지 않습니다.");
+        }
+        return fileStoragePort.load(storedName);
+    }
+
+    /**
+     * 저장 파일명은 "UUID_원본이름" 형식이라 앞의 UUID 를 떼어 원래 이름을 돌려준다.
+     */
+    public String originalNameOf(String storedName) {
+        int separator = storedName.indexOf('_');
+        return (separator < 0 || separator == storedName.length() - 1)
+                ? storedName
+                : storedName.substring(separator + 1);
     }
 
     private void validate(MultipartFile file) {
