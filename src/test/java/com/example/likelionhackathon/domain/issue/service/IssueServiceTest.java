@@ -267,6 +267,15 @@ class IssueServiceTest {
         IssueResponse.Created response = issueService.create(request);
 
         assertThat(response.issueId()).isEqualTo(ISSUE_ID);
+
+        ArgumentCaptor<Issue> captor = ArgumentCaptor.forClass(Issue.class);
+        verify(issueRepository).save(captor.capture());
+        assertThat(captor.getValue().getChecklist())
+                .extracting(IssueChecklistItem::getContent)
+                .containsExactly("결제 API 요구사항 확정", "국가별 캠페인 문구 확정");
+        assertThat(captor.getValue().getChecklist())
+                .extracting(IssueChecklistItem::getOrderIndex)
+                .containsExactly(0, 1);
     }
 
     @Test
