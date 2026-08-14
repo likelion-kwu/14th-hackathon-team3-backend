@@ -2,6 +2,8 @@ package com.example.likelionhackathon.domain.workspace.service;
 
 import com.example.likelionhackathon.domain.workspace.dto.WorkspaceRequest;
 import com.example.likelionhackathon.domain.workspace.dto.WorkspaceResponse;
+import com.example.likelionhackathon.domain.user.entity.User;
+import com.example.likelionhackathon.domain.user.repository.UserRepository;
 import com.example.likelionhackathon.domain.workspace.entity.Workspace;
 import com.example.likelionhackathon.domain.workspace.entity.WorkspaceEnums.InvitationStatus;
 import com.example.likelionhackathon.domain.workspace.entity.WorkspaceEnums.InvitationType;
@@ -29,9 +31,12 @@ import java.security.SecureRandom;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
@@ -54,6 +59,7 @@ public class WorkspaceService {
     private final WorkspaceInvitationRepository invitationRepository;
     private final CurrentUserProvider currentUserProvider;
     private final WorkspaceProjectCounter projectCounter;
+    private final UserRepository userRepository;
 
     @Value("${workspace.invitation-base-url:https://relai.example.com/invite}")
     private String invitationBaseUrl;
@@ -235,6 +241,77 @@ public class WorkspaceService {
                 : List.of();
 
         return new WorkspaceResponse.Members(members, pendingInvitations);
+    }
+
+    @Transactional(readOnly = true)
+    public WorkspaceResponse.OrganizationChart getOrganizationChart(Long workspaceId) {
+        findWorkspace(workspaceId);
+        requireAccess(workspaceId);
+
+        List<WorkspaceMember> members = memberRepository
+                .findAllByWorkspaceIdAndStatusOrderByIdAsc(workspaceId, WorkspaceMemberStatus.ACTIVE);
+        Map<Long, User> usersById = findUsersById(members);
+
+        Map<String, List<WorkspaceResponse.OrganizationMember>> membersByTeam = new LinkedHashMap<>();
+        for (WorkspaceMember member : members) {
+            Long userId = parseUserId(member.getPrincipalKey());
+            User user = usersById.get(userId);
+            if (user == null) {
+                throw new CustomException(ErrorCode.USER_NOT_FOUND);
+            }
+            membersByTeam.computeIfAbsent(member.getTeamName(), ignored -> new ArrayList<>())
+                    .add(toOrganizationMember(member, user));
+        }
+
+        Comparator<WorkspaceResponse.OrganizationMember> memberComparator = Comparator
+                .comparing(WorkspaceResponse.OrganizationMember::name)
+                .thenComparing(WorkspaceResponse.OrganizationMember::memberId);
+        Comparator<String> teamComparator = Comparator.nullsLast(Comparator.naturalOrder());
+
+        List<WorkspaceResponse.OrganizationTeam> teams = membersByTeam.entrySet().stream()
+                .sorted(Map.Entry.comparingByKey(teamComparator))
+                .map(entry -> new WorkspaceResponse.OrganizationTeam(
+                        entry.getKey(),
+                        entry.getValue().stream().sorted(memberComparator).toList()
+                ))
+                .toList();
+
+        return new WorkspaceResponse.OrganizationChart(workspaceId, teams);
+    }
+
+    private Map<Long, User> findUsersById(List<WorkspaceMember> members) {
+        List<Long> userIds = members.stream()
+                .map(WorkspaceMember::getPrincipalKey)
+                .map(this::parseUserId)
+                .distinct()
+                .toList();
+        Map<Long, User> usersById = new LinkedHashMap<>();
+        userRepository.findAllById(userIds).forEach(user -> usersById.put(user.getId(), user));
+        if (usersById.size() != userIds.size()) {
+            throw new CustomException(ErrorCode.USER_NOT_FOUND);
+        }
+        return usersById;
+    }
+
+    private Long parseUserId(String principalKey) {
+        try {
+            return Long.valueOf(principalKey);
+        } catch (NumberFormatException e) {
+            throw new CustomException(ErrorCode.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    private WorkspaceResponse.OrganizationMember toOrganizationMember(
+            WorkspaceMember member,
+            User user
+    ) {
+        return new WorkspaceResponse.OrganizationMember(
+                member.getId(),
+                member.getName(),
+                member.getCompanyName(),
+                member.getJobTitle(),
+                user.getActivityStatus()
+        );
     }
 
     @Transactional
