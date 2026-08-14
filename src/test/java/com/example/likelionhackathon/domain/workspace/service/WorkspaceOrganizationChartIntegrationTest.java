@@ -60,7 +60,10 @@ class WorkspaceOrganizationChartIntegrationTest {
         User hidden = saveUser("organization-hidden@example.com", "Hidden User", ActivityStatus.ACTIVE);
         memberRepository.save(member(amy, "Amy", "Partner", "Engineering", null, WorkspaceRole.MEMBER));
         memberRepository.save(member(bob, "Bob", "RelAI", "Design", "Designer", WorkspaceRole.MEMBER));
-        memberRepository.save(member(kim, "Kim", "RelAI", null, null, WorkspaceRole.MEMBER));
+        memberRepository.save(WorkspaceMember.createInvitedMember(
+                workspace, kim.getId().toString(), "Kim", null,
+                "RelAI", null, null, WorkspaceRole.MEMBER
+        ));
         WorkspaceMember suspended = member(
                 hidden, "Hidden", "RelAI", "Product", null, WorkspaceRole.MEMBER
         );
@@ -75,14 +78,20 @@ class WorkspaceOrganizationChartIntegrationTest {
                 .andExpect(jsonPath("$.data.teams[0].teamName").value("Design"))
                 .andExpect(jsonPath("$.data.teams[1].teamName").value("Engineering"))
                 .andExpect(jsonPath("$.data.teams[1].members[0].name").value("Amy"))
+                .andExpect(jsonPath("$.data.teams[1].members[0].email")
+                        .value("organization-amy@example.com"))
                 .andExpect(jsonPath("$.data.teams[1].members[0].companyName").value("Partner"))
                 .andExpect(jsonPath("$.data.teams[1].members[0].jobTitle")
                         .value(org.hamcrest.Matchers.nullValue()))
                 .andExpect(jsonPath("$.data.teams[1].members[0].activityStatus").value("OFF"))
                 .andExpect(jsonPath("$.data.teams[1].members[1].name").value("Zoe"))
+                .andExpect(jsonPath("$.data.teams[1].members[1].email")
+                        .value("organization-owner@example.com"))
                 .andExpect(jsonPath("$.data.teams[2].teamName")
                         .value(org.hamcrest.Matchers.nullValue()))
                 .andExpect(jsonPath("$.data.teams[2].members[0].name").value("Kim"))
+                .andExpect(jsonPath("$.data.teams[2].members[0].email")
+                        .value(org.hamcrest.Matchers.nullValue()))
                 .andExpect(jsonPath("$.data.teams[*].members[*].name").value(
                         org.hamcrest.Matchers.not(org.hamcrest.Matchers.hasItem("Hidden"))
                 ));
