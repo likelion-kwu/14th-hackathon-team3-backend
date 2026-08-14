@@ -3,10 +3,10 @@ package com.example.likelionhackathon.domain.issue.service;
 import java.util.Optional;
 
 /**
- * 이슈가 회원 도메인에 물어봐야 하는 것들.
+ * 이슈가 프로젝트 멤버 도메인에 물어봐야 하는 것들.
  *
- * <p>담당자 이름 · 소속 · 직책과 프로젝트 멤버 여부는 회원/프로젝트 도메인 소관인데
- * 아직 구현되지 않았다. 그때까지 {@link EmptyIssueMemberPort} 가 식별자만 돌려준다.</p>
+ * <p>두 도메인이 서로를 직접 참조하지 않도록 이 인터페이스로 끊고,
+ * {@link JpaIssueMemberPort} 가 프로젝트 멤버 테이블에서 조회한다.</p>
  */
 public interface IssueMemberPort {
 
