@@ -102,4 +102,14 @@ public final class WorkspaceResponse {
             WorkspaceRole role
     ) {
     }
+
+    public record Profile(
+            Long userId,
+            Long workspaceId,
+            String name,
+            String companyName,
+            String teamName,
+            String jobTitle
+    ) {
+    }
 }

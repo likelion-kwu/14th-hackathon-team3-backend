@@ -79,4 +79,12 @@ public final class WorkspaceRequest {
             @Size(max = 100) String jobTitle
     ) {
     }
+
+    public record UpdateProfile(
+            @Size(max = 100) String name,
+            @Size(max = 100) String companyName,
+            @Size(max = 100) String teamName,
+            @Size(max = 100) String jobTitle
+    ) {
+    }
 }
