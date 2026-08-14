@@ -50,6 +50,9 @@ class WorkspaceServiceTest {
     @Mock
     private CurrentUserProvider currentUserProvider;
 
+    @Mock
+    private WorkspaceProjectCounter projectCounter;
+
     private WorkspaceService workspaceService;
 
     @BeforeEach
@@ -58,7 +61,8 @@ class WorkspaceServiceTest {
                 workspaceRepository,
                 memberRepository,
                 invitationRepository,
-                currentUserProvider
+                currentUserProvider,
+                projectCounter
         );
         ReflectionTestUtils.setField(
                 workspaceService,
