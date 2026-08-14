@@ -6,6 +6,7 @@ import com.example.likelionhackathon.domain.cycle.entity.Cycle;
 import com.example.likelionhackathon.domain.cycle.entity.CycleAiAnalysis;
 import com.example.likelionhackathon.domain.cycle.entity.CycleEnums.AnalysisStatus;
 import com.example.likelionhackathon.domain.cycle.entity.CycleEnums.CycleStatus;
+import com.example.likelionhackathon.domain.cycle.repository.CycleActivityRepository;
 import com.example.likelionhackathon.domain.cycle.repository.CycleAiAnalysisRepository;
 import com.example.likelionhackathon.domain.cycle.repository.CycleRepository;
 import com.example.likelionhackathon.domain.cycle.service.CycleIssuePort.IssueStats;
@@ -13,6 +14,7 @@ import com.example.likelionhackathon.domain.project.service.ProjectAccessService
 import com.example.likelionhackathon.global.error.ErrorCode;
 import com.example.likelionhackathon.global.error.exception.CustomException;
 import lombok.RequiredArgsConstructor;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -27,6 +29,7 @@ import java.util.List;
 public class CycleService {
 
     private final CycleRepository cycleRepository;
+    private final CycleActivityRepository cycleActivityRepository;
     private final CycleAiAnalysisRepository cycleAiAnalysisRepository;
     private final CycleIssuePort cycleIssuePort;
     private final ProjectAccessService projectAccessService;
@@ -103,7 +106,7 @@ public class CycleService {
 
         cycle.update(request.name(), request.startDate(), request.endDate(), request.goal());
 
-        return CycleResponse.Updated.of(cycle);
+        return CycleResponse.Updated.of(saveDetectingConflict(cycle));
     }
 
     @Transactional
@@ -120,8 +123,9 @@ public class CycleService {
         }
 
         cycle.changeStatus(request.status());
+        Cycle saved = saveDetectingConflict(cycle);
 
-        return new CycleResponse.StatusChanged(cycle.getId(), cycle.getStatus(), movedIssueCount);
+        return new CycleResponse.StatusChanged(saved.getId(), saved.getStatus(), movedIssueCount);
     }
 
     @Transactional
@@ -132,6 +136,9 @@ public class CycleService {
             throw new CustomException(ErrorCode.CYCLE_CONFLICT, "소속된 이슈가 있어 삭제할 수 없습니다.");
         }
 
+        // 활동 기록과 AI 분석은 cycleId 를 단순 컬럼으로 갖고 있어 함께 지우지 않으면 남는다.
+        cycleActivityRepository.deleteByCycleId(cycleId);
+        cycleAiAnalysisRepository.deleteByCycleId(cycleId);
         cycleRepository.delete(cycle);
     }
 
@@ -152,6 +159,18 @@ public class CycleService {
         }
 
         return cycleIssuePort.moveUnfinishedIssues(cycle.getId(), targetCycleId);
+    }
+
+    /**
+     * 다른 요청이 먼저 같은 사이클을 수정했으면 409 로 알린다.
+     * 커밋 시점까지 미루면 예외가 서비스 밖에서 터져 500 이 나간다.
+     */
+    private Cycle saveDetectingConflict(Cycle cycle) {
+        try {
+            return cycleRepository.saveAndFlush(cycle);
+        } catch (ObjectOptimisticLockingFailureException e) {
+            throw new CustomException(ErrorCode.CYCLE_CONFLICT, "다른 사용자가 사이클을 먼저 수정했습니다.");
+        }
     }
 
     private void validatePeriod(LocalDate startDate, LocalDate endDate) {

@@ -19,6 +19,7 @@ import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.Locale;
 import java.util.List;
 import java.util.Map;
 
@@ -44,8 +45,8 @@ public class CycleActivityService {
         ActivityType activityType = parseType(type);
 
         List<CycleActivity> activities = (activityType == null)
-                ? cycleActivityRepository.findByCycleIdOrderByOccurredAtDesc(cycleId, pageable)
-                : cycleActivityRepository.findByCycleIdAndTypeOrderByOccurredAtDesc(cycleId, activityType, pageable);
+                ? cycleActivityRepository.findByCycleIdOrderByOccurredAtDescIdDesc(cycleId, pageable)
+                : cycleActivityRepository.findByCycleIdAndTypeOrderByOccurredAtDescIdDesc(cycleId, activityType, pageable);
 
         return groupByDate(activities);
     }
@@ -101,7 +102,7 @@ public class CycleActivityService {
             return null;
         }
         try {
-            return ActivityType.valueOf(type.toUpperCase());
+            return ActivityType.valueOf(type.toUpperCase(Locale.ROOT));
         } catch (IllegalArgumentException e) {
             throw new CustomException(ErrorCode.CYCLE_INVALID_INPUT, "지원하지 않는 활동 유형입니다.");
         }

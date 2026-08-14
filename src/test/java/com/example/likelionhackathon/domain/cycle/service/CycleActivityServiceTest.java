@@ -78,7 +78,7 @@ class CycleActivityServiceTest {
                 LocalDateTime.of(java.time.LocalDate.now().minusDays(1), LocalTime.of(11, 3));
 
         when(cycleRepository.findById(CYCLE_ID)).thenReturn(Optional.of(cycle()));
-        when(cycleActivityRepository.findByCycleIdOrderByOccurredAtDesc(any(), any())).thenReturn(List.of(
+        when(cycleActivityRepository.findByCycleIdOrderByOccurredAtDescIdDesc(any(), any())).thenReturn(List.of(
                 CycleActivity.issueStatusChanged(
                         CYCLE_ID, todayAfternoon, "김민준", 301L, "결제 API v3 연동", "IN_PROGRESS", "DONE"),
                 CycleActivity.aiProgressUpdated(CYCLE_ID, todayAfternoon.minusMinutes(22), 72, 78, "갱신"),

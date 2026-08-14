@@ -20,6 +20,9 @@ import java.util.List;
 /**
  * 사이클 AI 분석 실행부.
  *
+ * <p>{@code @Async} 동작은 {@code OpenAiConfig} 의 {@code @EnableAsync} 에 의존한다.
+ * 그 설정이 사라지면 이 메서드가 동기로 돌아 요청 스레드를 붙잡는다.</p>
+ *
  * <p>현재는 이슈 집계에서 진행률과 요약 문장을 계산하는 결정적 구현이다.
  * 근거(evidences)와 확인 필요 항목(checkNeeded)은 협업 도구 연동 데이터가 있어야 채울 수 있어
  * 비워 둔다. LLM 호출로 바꾸려면 인수인계 도메인의 OpenAiHandoverClient 와 연동 방식을 맞춰야 한다.</p>

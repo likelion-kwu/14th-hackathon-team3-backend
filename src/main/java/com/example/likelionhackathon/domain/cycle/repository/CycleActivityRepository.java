@@ -9,7 +9,11 @@ import java.util.List;
 
 public interface CycleActivityRepository extends JpaRepository<CycleActivity, Long> {
 
-    List<CycleActivity> findByCycleIdOrderByOccurredAtDesc(Long cycleId, Pageable pageable);
+    // 같은 시각의 활동이 페이지 경계에서 중복·누락되지 않도록 id 를 보조 정렬로 둔다.
+    List<CycleActivity> findByCycleIdOrderByOccurredAtDescIdDesc(Long cycleId, Pageable pageable);
 
-    List<CycleActivity> findByCycleIdAndTypeOrderByOccurredAtDesc(Long cycleId, ActivityType type, Pageable pageable);
+    List<CycleActivity> findByCycleIdAndTypeOrderByOccurredAtDescIdDesc(
+            Long cycleId, ActivityType type, Pageable pageable);
+
+    void deleteByCycleId(Long cycleId);
 }

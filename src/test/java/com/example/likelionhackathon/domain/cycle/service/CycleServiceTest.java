@@ -5,6 +5,7 @@ import com.example.likelionhackathon.domain.cycle.dto.CycleResponse;
 import com.example.likelionhackathon.domain.cycle.entity.Cycle;
 import com.example.likelionhackathon.domain.cycle.entity.CycleEnums.AnalysisStatus;
 import com.example.likelionhackathon.domain.cycle.entity.CycleEnums.CycleStatus;
+import com.example.likelionhackathon.domain.cycle.repository.CycleActivityRepository;
 import com.example.likelionhackathon.domain.cycle.repository.CycleAiAnalysisRepository;
 import com.example.likelionhackathon.domain.cycle.repository.CycleRepository;
 import com.example.likelionhackathon.domain.cycle.service.CycleIssuePort.IssueStats;
@@ -16,6 +17,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.LocalDate;
@@ -27,6 +29,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -39,6 +42,9 @@ class CycleServiceTest {
 
     @Mock
     private CycleRepository cycleRepository;
+
+    @Mock
+    private CycleActivityRepository cycleActivityRepository;
 
     @Mock
     private CycleAiAnalysisRepository cycleAiAnalysisRepository;
@@ -54,7 +60,11 @@ class CycleServiceTest {
     @BeforeEach
     void setUp() {
         cycleService = new CycleService(
-                cycleRepository, cycleAiAnalysisRepository, cycleIssuePort, projectAccessService);
+                cycleRepository, cycleActivityRepository, cycleAiAnalysisRepository,
+                cycleIssuePort, projectAccessService);
+        // 낙관적 잠금 감지를 위해 saveAndFlush 를 거치므로 저장한 엔티티를 그대로 돌려준다.
+        lenient().when(cycleRepository.saveAndFlush(any(Cycle.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
     }
 
     @Test
@@ -103,6 +113,36 @@ class CycleServiceTest {
                 .isEqualTo(ErrorCode.CYCLE_INVALID_INPUT);
 
         verify(cycleIssuePort, never()).moveUnfinishedIssues(any(), any());
+    }
+
+    @Test
+    void deleteAlsoRemovesActivitiesAndAnalyses() {
+        Cycle cycle = cycle(CYCLE_ID, LocalDate.of(2026, 7, 29), LocalDate.of(2026, 8, 12));
+        when(cycleRepository.findById(CYCLE_ID)).thenReturn(Optional.of(cycle));
+        when(cycleIssuePort.hasAnyIssue(CYCLE_ID)).thenReturn(false);
+
+        cycleService.delete(CYCLE_ID);
+
+        verify(cycleActivityRepository).deleteByCycleId(CYCLE_ID);
+        verify(cycleAiAnalysisRepository).deleteByCycleId(CYCLE_ID);
+        verify(cycleRepository).delete(cycle);
+    }
+
+    @Test
+    void updateReportsConflictWhenAnotherRequestSavedFirst() {
+        Cycle cycle = cycle(CYCLE_ID, LocalDate.of(2026, 7, 29), LocalDate.of(2026, 8, 12));
+        when(cycleRepository.findById(CYCLE_ID)).thenReturn(Optional.of(cycle));
+        when(cycleRepository.saveAndFlush(any(Cycle.class)))
+                .thenThrow(new ObjectOptimisticLockingFailureException(Cycle.class, CYCLE_ID));
+
+        CycleRequest.Update request = new CycleRequest.Update(
+                "Cycle 3", LocalDate.of(2026, 7, 29), LocalDate.of(2026, 8, 12), null);
+
+        assertThatThrownBy(() -> cycleService.update(CYCLE_ID, request))
+                .isInstanceOf(CustomException.class)
+                .hasMessage("다른 사용자가 사이클을 먼저 수정했습니다.")
+                .extracting(e -> ((CustomException) e).getErrorCode())
+                .isEqualTo(ErrorCode.CYCLE_CONFLICT);
     }
 
     @Test

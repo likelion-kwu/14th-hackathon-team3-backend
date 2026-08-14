@@ -12,4 +12,6 @@ public interface CycleAiAnalysisRepository extends JpaRepository<CycleAiAnalysis
     Optional<CycleAiAnalysis> findFirstByCycleIdAndStatusOrderByAnalyzedAtDesc(Long cycleId, AnalysisStatus status);
 
     boolean existsByCycleIdAndStatusIn(Long cycleId, Collection<AnalysisStatus> statuses);
+
+    void deleteByCycleId(Long cycleId);
 }

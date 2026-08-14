@@ -8,6 +8,7 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Version;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -42,6 +43,10 @@ public class Cycle {
 
     @Column(length = 1000)
     private String goal;
+
+    // 두 요청이 같은 사이클을 동시에 수정하면 나중 커밋이 앞선 변경을 덮어써서 막는다.
+    @Version
+    private Long version;
 
     public static Cycle create(Long projectId, String name, LocalDate startDate, LocalDate endDate, String goal) {
         Cycle cycle = new Cycle();
