@@ -27,11 +27,15 @@ public interface CycleIssuePort {
     ) {
         public static final IssueStats EMPTY = new IssueStats(0, 0, 0, 0, 0);
 
+        /**
+         * 내림으로 계산한다. 반올림하면 199/200 처럼 아직 남은 업무가 있는데도
+         * 100%로 보여 완료된 사이클과 구분되지 않는다.
+         */
         public int progressRate() {
             if (totalCount == 0) {
                 return 0;
             }
-            return Math.round((float) doneCount * 100 / totalCount);
+            return (int) ((long) doneCount * 100 / totalCount);
         }
     }
 }

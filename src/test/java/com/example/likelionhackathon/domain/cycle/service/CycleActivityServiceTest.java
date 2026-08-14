@@ -100,6 +100,21 @@ class CycleActivityServiceTest {
     }
 
     @Test
+    void rejectsInvalidPaging() {
+        when(cycleRepository.findById(CYCLE_ID)).thenReturn(Optional.of(cycle()));
+
+        assertThatThrownBy(() -> cycleActivityService.getActivities(CYCLE_ID, null, -1, 20))
+                .isInstanceOf(CustomException.class)
+                .extracting(e -> ((CustomException) e).getErrorCode())
+                .isEqualTo(ErrorCode.CYCLE_INVALID_INPUT);
+
+        assertThatThrownBy(() -> cycleActivityService.getActivities(CYCLE_ID, null, 0, 0))
+                .isInstanceOf(CustomException.class)
+                .extracting(e -> ((CustomException) e).getErrorCode())
+                .isEqualTo(ErrorCode.CYCLE_INVALID_INPUT);
+    }
+
+    @Test
     void rejectsNonProjectMember() {
         when(cycleRepository.findById(CYCLE_ID)).thenReturn(Optional.of(cycle()));
         doThrow(new CustomException(ErrorCode.PROJECT_ACCESS_DENIED))

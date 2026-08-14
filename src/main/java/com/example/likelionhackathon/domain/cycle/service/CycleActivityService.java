@@ -28,6 +28,7 @@ import java.util.Map;
 public class CycleActivityService {
 
     private static final DateTimeFormatter DATE_LABEL_FORMAT = DateTimeFormatter.ofPattern("yyyy.MM.dd");
+    private static final int MAX_PAGE_SIZE = 100;
 
     private final CycleActivityRepository cycleActivityRepository;
     private final CycleRepository cycleRepository;
@@ -39,7 +40,7 @@ public class CycleActivityService {
         projectAccessService.findProject(cycle.getProjectId());
         projectAccessService.requireAccess(cycle.getProjectId());
 
-        Pageable pageable = PageRequest.of(page, size);
+        Pageable pageable = PageRequest.of(page, validatePaging(page, size));
         ActivityType activityType = parseType(type);
 
         List<CycleActivity> activities = (activityType == null)
@@ -82,6 +83,17 @@ public class CycleActivityService {
             return "어제";
         }
         return date.format(DATE_LABEL_FORMAT);
+    }
+
+    /**
+     * PageRequest.of 는 잘못된 값에 IllegalArgumentException 을 던져 500 으로 나간다.
+     * 400 으로 응답하도록 먼저 확인한다.
+     */
+    private int validatePaging(int page, int size) {
+        if (page < 0 || size < 1 || size > MAX_PAGE_SIZE) {
+            throw new CustomException(ErrorCode.CYCLE_INVALID_INPUT, "페이지 번호 또는 크기가 올바르지 않습니다.");
+        }
+        return size;
     }
 
     private ActivityType parseType(String type) {

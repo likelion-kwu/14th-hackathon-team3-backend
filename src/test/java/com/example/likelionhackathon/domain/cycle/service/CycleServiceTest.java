@@ -165,7 +165,7 @@ class CycleServiceTest {
         CycleResponse.Detail detail = cycleService.getDetail(CYCLE_ID);
 
         assertThat(detail.dDay()).isEqualTo(4);
-        assertThat(detail.progressRate()).isEqualTo(83); // 19 / 23
+        assertThat(detail.progressRate()).isEqualTo(82); // 19 / 23 을 내림
         assertThat(detail.summary().doneCount()).isEqualTo(19);
         assertThat(detail.summary().canceledCount()).isEqualTo(1);
         assertThat(detail.nextCycle().cycleId()).isEqualTo(4L);
