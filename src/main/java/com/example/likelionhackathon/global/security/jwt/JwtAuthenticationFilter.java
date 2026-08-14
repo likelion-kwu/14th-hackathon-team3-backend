@@ -1,13 +1,11 @@
 package com.example.likelionhackathon.global.security.jwt;
 
-import com.example.likelionhackathon.global.security.JwtAuthenticationEntryPoint;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.authentication.AnonymousAuthenticationToken;
-import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContext;
@@ -26,7 +24,6 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private static final String BEARER_PREFIX = "Bearer ";
 
     private final JwtTokenProvider jwtTokenProvider;
-    private final JwtAuthenticationEntryPoint authenticationEntryPoint;
 
     @Override
     protected void doFilterInternal(
@@ -46,25 +43,25 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         }
 
         String token = authorization.substring(BEARER_PREFIX.length()).trim();
-        try {
-            if (token.isEmpty() || !jwtTokenProvider.isValid(token)) {
-                commenceUnauthorized(request, response);
-                return;
-            }
-
-            Long userId = jwtTokenProvider.getUserId(token);
-            Authentication authentication = new UsernamePasswordAuthenticationToken(
-                    userId.toString(),
-                    null,
-                    Collections.emptyList()
-            );
-            SecurityContext context = SecurityContextHolder.createEmptyContext();
-            context.setAuthentication(authentication);
-            SecurityContextHolder.setContext(context);
-        } catch (RuntimeException e) {
-            SecurityContextHolder.clearContext();
-            commenceUnauthorized(request, response);
+        if (token.isEmpty()) {
+            filterChain.doFilter(request, response);
             return;
+        }
+
+        try {
+            if (jwtTokenProvider.isValid(token)) {
+                Long userId = jwtTokenProvider.getUserId(token);
+                Authentication authentication = new UsernamePasswordAuthenticationToken(
+                        userId.toString(),
+                        null,
+                        Collections.emptyList()
+                );
+                SecurityContext context = SecurityContextHolder.createEmptyContext();
+                context.setAuthentication(authentication);
+                SecurityContextHolder.setContext(context);
+            }
+        } catch (RuntimeException e) {
+            // Invalid JWTs remain unauthenticated; authorization is delegated to SecurityConfig.
         }
 
         filterChain.doFilter(request, response);
@@ -75,14 +72,5 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         return authentication != null
                 && authentication.isAuthenticated()
                 && !(authentication instanceof AnonymousAuthenticationToken);
-    }
-
-    private void commenceUnauthorized(HttpServletRequest request, HttpServletResponse response)
-            throws IOException, ServletException {
-        authenticationEntryPoint.commence(
-                request,
-                response,
-                new BadCredentialsException("Invalid access token")
-        );
     }
 }

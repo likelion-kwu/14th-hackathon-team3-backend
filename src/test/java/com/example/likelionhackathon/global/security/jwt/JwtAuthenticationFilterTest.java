@@ -1,6 +1,5 @@
 package com.example.likelionhackathon.global.security.jwt;
 
-import com.example.likelionhackathon.global.security.JwtAuthenticationEntryPoint;
 import jakarta.servlet.FilterChain;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -8,19 +7,12 @@ import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.core.context.SecurityContextHolder;
 
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
-
 class JwtAuthenticationFilterTest {
 
     private static final String TEST_SECRET =
@@ -34,8 +26,7 @@ class JwtAuthenticationFilterTest {
 
     @Test
     void missingAuthorizationHeaderContinuesWithoutAuthentication() throws Exception {
-        JwtAuthenticationEntryPoint entryPoint = mock(JwtAuthenticationEntryPoint.class);
-        JwtAuthenticationFilter filter = filter(new JwtTokenProvider(TEST_SECRET, EXPIRATION_MS), entryPoint);
+        JwtAuthenticationFilter filter = filter(new JwtTokenProvider(TEST_SECRET, EXPIRATION_MS));
         AtomicBoolean chainCalled = new AtomicBoolean();
 
         filter.doFilter(new MockHttpServletRequest(), new MockHttpServletResponse(),
@@ -43,14 +34,12 @@ class JwtAuthenticationFilterTest {
 
         assertThat(chainCalled).isTrue();
         assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
-        verify(entryPoint, never()).commence(any(), any(), any());
     }
 
     @Test
     void validBearerTokenCreatesAuthenticationWithUserIdPrincipal() throws Exception {
         JwtTokenProvider provider = new JwtTokenProvider(TEST_SECRET, EXPIRATION_MS);
-        JwtAuthenticationEntryPoint entryPoint = mock(JwtAuthenticationEntryPoint.class);
-        JwtAuthenticationFilter filter = filter(provider, entryPoint);
+        JwtAuthenticationFilter filter = filter(provider);
         MockHttpServletRequest request = bearerRequest(provider.createAccessToken(42L));
         AtomicBoolean chainCalled = new AtomicBoolean();
 
@@ -64,46 +53,41 @@ class JwtAuthenticationFilterTest {
     }
 
     @Test
-    void invalidTokenInvokesEntryPointAndStopsChain() throws Exception {
-        JwtAuthenticationEntryPoint entryPoint = mock(JwtAuthenticationEntryPoint.class);
-        JwtAuthenticationFilter filter = filter(new JwtTokenProvider(TEST_SECRET, EXPIRATION_MS), entryPoint);
+    void invalidTokenContinuesWithoutAuthentication() throws Exception {
+        JwtAuthenticationFilter filter = filter(new JwtTokenProvider(TEST_SECRET, EXPIRATION_MS));
         MockHttpServletRequest request = bearerRequest("not-a-jwt");
         MockHttpServletResponse response = new MockHttpServletResponse();
         AtomicBoolean chainCalled = new AtomicBoolean();
 
         filter.doFilter(request, response, chain(chainCalled));
 
-        assertThat(chainCalled).isFalse();
+        assertThat(chainCalled).isTrue();
         assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
-        verify(entryPoint).commence(eq(request), eq(response), any(AuthenticationException.class));
     }
 
     @Test
-    void expiredTokenInvokesEntryPointAndStopsChain() throws Exception {
-        JwtTokenProvider provider = new JwtTokenProvider(TEST_SECRET, 1L);
-        JwtAuthenticationEntryPoint entryPoint = mock(JwtAuthenticationEntryPoint.class);
-        JwtAuthenticationFilter filter = filter(provider, entryPoint);
+    void expiredTokenContinuesWithoutAuthentication() throws Exception {
+        JwtTokenProvider provider = new JwtTokenProvider(TEST_SECRET, -60_000L);
+        JwtAuthenticationFilter filter = filter(provider);
         MockHttpServletRequest request = bearerRequest(provider.createAccessToken(7L));
         AtomicBoolean chainCalled = new AtomicBoolean();
-        Thread.sleep(10L);
 
         filter.doFilter(request, new MockHttpServletResponse(), chain(chainCalled));
 
-        assertThat(chainCalled).isFalse();
-        verify(entryPoint).commence(eq(request), any(), any(AuthenticationException.class));
+        assertThat(chainCalled).isTrue();
+        assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
     }
 
     @Test
-    void emptyBearerTokenInvokesEntryPointAndStopsChain() throws Exception {
-        JwtAuthenticationEntryPoint entryPoint = mock(JwtAuthenticationEntryPoint.class);
-        JwtAuthenticationFilter filter = filter(new JwtTokenProvider(TEST_SECRET, EXPIRATION_MS), entryPoint);
+    void emptyBearerTokenContinuesWithoutAuthentication() throws Exception {
+        JwtAuthenticationFilter filter = filter(new JwtTokenProvider(TEST_SECRET, EXPIRATION_MS));
         MockHttpServletRequest request = bearerRequest("");
         AtomicBoolean chainCalled = new AtomicBoolean();
 
         filter.doFilter(request, new MockHttpServletResponse(), chain(chainCalled));
 
-        assertThat(chainCalled).isFalse();
-        verify(entryPoint).commence(eq(request), any(), any(AuthenticationException.class));
+        assertThat(chainCalled).isTrue();
+        assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
     }
 
     @Test
@@ -111,8 +95,7 @@ class JwtAuthenticationFilterTest {
         Authentication existing = new UsernamePasswordAuthenticationToken("existing", null, List.of());
         SecurityContextHolder.getContext().setAuthentication(existing);
         JwtTokenProvider provider = new JwtTokenProvider(TEST_SECRET, EXPIRATION_MS);
-        JwtAuthenticationEntryPoint entryPoint = mock(JwtAuthenticationEntryPoint.class);
-        JwtAuthenticationFilter filter = filter(provider, entryPoint);
+        JwtAuthenticationFilter filter = filter(provider);
         MockHttpServletRequest request = bearerRequest(provider.createAccessToken(42L));
         AtomicBoolean chainCalled = new AtomicBoolean();
 
@@ -122,11 +105,8 @@ class JwtAuthenticationFilterTest {
         assertThat(SecurityContextHolder.getContext().getAuthentication()).isSameAs(existing);
     }
 
-    private JwtAuthenticationFilter filter(
-            JwtTokenProvider provider,
-            JwtAuthenticationEntryPoint entryPoint
-    ) {
-        return new JwtAuthenticationFilter(provider, entryPoint);
+    private JwtAuthenticationFilter filter(JwtTokenProvider provider) {
+        return new JwtAuthenticationFilter(provider);
     }
 
     private MockHttpServletRequest bearerRequest(String token) {

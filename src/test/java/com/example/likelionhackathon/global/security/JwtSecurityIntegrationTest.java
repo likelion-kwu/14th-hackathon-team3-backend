@@ -48,6 +48,25 @@ class JwtSecurityIntegrationTest {
     }
 
     @Test
+    void publicHealthIsNotBlockedByInvalidJwt() throws Exception {
+        mockMvc.perform(get("/health")
+                        .header("Authorization", "Bearer not-a-jwt"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void publicLoginIsNotBlockedByExpiredJwt() throws Exception {
+        JwtTokenProvider expiredProvider = new JwtTokenProvider(TEST_SECRET, -60_000L);
+        String token = expiredProvider.createAccessToken(9L);
+
+        mockMvc.perform(post("/api/v1/auth/login")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(result -> assertThat(result.getResponse().getStatus()).isNotEqualTo(401));
+    }
+
+    @Test
     void protectedApiWithoutAuthorizationReturnsApiResponse401() throws Exception {
         mockMvc.perform(get("/api/v1/security-test/principal"))
                 .andExpect(status().isUnauthorized())
@@ -67,9 +86,8 @@ class JwtSecurityIntegrationTest {
 
     @Test
     void expiredJwtReturnsApiResponse401() throws Exception {
-        JwtTokenProvider expiredProvider = new JwtTokenProvider(TEST_SECRET, 1L);
+        JwtTokenProvider expiredProvider = new JwtTokenProvider(TEST_SECRET, -60_000L);
         String token = expiredProvider.createAccessToken(9L);
-        Thread.sleep(10L);
 
         mockMvc.perform(get("/api/v1/security-test/principal")
                         .header("Authorization", "Bearer " + token))
