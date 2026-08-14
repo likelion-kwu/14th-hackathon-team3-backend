@@ -38,3 +38,6 @@ out/
 
 ### env ###
 application-secret.properties
+.env
+.env.*
+application-local.properties
