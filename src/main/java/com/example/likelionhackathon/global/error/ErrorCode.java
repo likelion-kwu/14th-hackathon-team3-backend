@@ -86,9 +86,7 @@ public enum ErrorCode {
     // 상세 사유는 CustomException 의 detailMessage 로 구분한다.
     CYCLE_INVALID_INPUT(HttpStatus.BAD_REQUEST, "400CYCLE", "사이클 입력값이 올바르지 않습니다."),
     CYCLE_NOT_FOUND(HttpStatus.NOT_FOUND, "404CYCLE", "존재하지 않는 사이클입니다."),
-    CYCLE_CONFLICT(HttpStatus.CONFLICT, "409CYCLE", "요청을 처리할 수 없는 사이클 상태입니다."),
-    CYCLE_PROJECT_NOT_FOUND(HttpStatus.NOT_FOUND, "404PROJECT", "존재하지 않는 프로젝트입니다."),
-    CYCLE_PROJECT_ACCESS_DENIED(HttpStatus.FORBIDDEN, "403PROJECT", "프로젝트에 대한 접근 권한이 없습니다.");
+    CYCLE_CONFLICT(HttpStatus.CONFLICT, "409CYCLE", "요청을 처리할 수 없는 사이클 상태입니다.");
 
     private final HttpStatus httpStatus;
     private final String code;

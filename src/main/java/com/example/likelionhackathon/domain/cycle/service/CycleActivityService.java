@@ -1,10 +1,12 @@
 package com.example.likelionhackathon.domain.cycle.service;
 
 import com.example.likelionhackathon.domain.cycle.dto.CycleResponse;
+import com.example.likelionhackathon.domain.cycle.entity.Cycle;
 import com.example.likelionhackathon.domain.cycle.entity.CycleActivity;
 import com.example.likelionhackathon.domain.cycle.entity.CycleEnums.ActivityType;
 import com.example.likelionhackathon.domain.cycle.repository.CycleActivityRepository;
 import com.example.likelionhackathon.domain.cycle.repository.CycleRepository;
+import com.example.likelionhackathon.domain.project.service.ProjectAccessService;
 import com.example.likelionhackathon.global.error.ErrorCode;
 import com.example.likelionhackathon.global.error.exception.CustomException;
 import lombok.RequiredArgsConstructor;
@@ -29,11 +31,13 @@ public class CycleActivityService {
 
     private final CycleActivityRepository cycleActivityRepository;
     private final CycleRepository cycleRepository;
+    private final ProjectAccessService projectAccessService;
 
     public List<CycleResponse.ActivityGroup> getActivities(Long cycleId, String type, int page, int size) {
-        if (!cycleRepository.existsById(cycleId)) {
-            throw new CustomException(ErrorCode.CYCLE_NOT_FOUND);
-        }
+        Cycle cycle = cycleRepository.findById(cycleId)
+                .orElseThrow(() -> new CustomException(ErrorCode.CYCLE_NOT_FOUND));
+        projectAccessService.findProject(cycle.getProjectId());
+        projectAccessService.requireAccess(cycle.getProjectId());
 
         Pageable pageable = PageRequest.of(page, size);
         ActivityType activityType = parseType(type);

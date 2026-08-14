@@ -8,6 +8,7 @@ import com.example.likelionhackathon.domain.cycle.entity.CycleEnums.CycleStatus;
 import com.example.likelionhackathon.domain.cycle.repository.CycleAiAnalysisRepository;
 import com.example.likelionhackathon.domain.cycle.repository.CycleRepository;
 import com.example.likelionhackathon.domain.cycle.service.CycleIssuePort.IssueStats;
+import com.example.likelionhackathon.domain.project.service.ProjectAccessService;
 import com.example.likelionhackathon.global.error.ErrorCode;
 import com.example.likelionhackathon.global.error.exception.CustomException;
 import org.junit.jupiter.api.BeforeEach;
@@ -25,6 +26,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -44,11 +46,63 @@ class CycleServiceTest {
     @Mock
     private CycleIssuePort cycleIssuePort;
 
+    @Mock
+    private ProjectAccessService projectAccessService;
+
     private CycleService cycleService;
 
     @BeforeEach
     void setUp() {
-        cycleService = new CycleService(cycleRepository, cycleAiAnalysisRepository, cycleIssuePort);
+        cycleService = new CycleService(
+                cycleRepository, cycleAiAnalysisRepository, cycleIssuePort, projectAccessService);
+    }
+
+    @Test
+    void getCyclesRejectsNonProjectMember() {
+        doThrow(new CustomException(ErrorCode.PROJECT_ACCESS_DENIED))
+                .when(projectAccessService).requireAccess(PROJECT_ID);
+
+        assertThatThrownBy(() -> cycleService.getCycles(PROJECT_ID, null))
+                .isInstanceOf(CustomException.class)
+                .extracting(e -> ((CustomException) e).getErrorCode())
+                .isEqualTo(ErrorCode.PROJECT_ACCESS_DENIED);
+
+        verify(cycleRepository, never()).findByProjectIdOrderByStartDateAsc(any());
+    }
+
+    @Test
+    void deleteRejectsNonProjectMember() {
+        Cycle cycle = cycle(CYCLE_ID, LocalDate.of(2026, 7, 29), LocalDate.of(2026, 8, 12));
+        when(cycleRepository.findById(CYCLE_ID)).thenReturn(Optional.of(cycle));
+        doThrow(new CustomException(ErrorCode.PROJECT_ACCESS_DENIED))
+                .when(projectAccessService).requireAccess(PROJECT_ID);
+
+        assertThatThrownBy(() -> cycleService.delete(CYCLE_ID))
+                .isInstanceOf(CustomException.class)
+                .extracting(e -> ((CustomException) e).getErrorCode())
+                .isEqualTo(ErrorCode.PROJECT_ACCESS_DENIED);
+
+        verify(cycleRepository, never()).delete(any());
+    }
+
+    @Test
+    void changeStatusRejectsTransferToAnotherProjectCycle() {
+        Cycle cycle = cycle(CYCLE_ID, LocalDate.of(2026, 7, 29), LocalDate.of(2026, 8, 12));
+        cycle.changeStatus(CycleStatus.IN_PROGRESS);
+        Cycle foreign = Cycle.create(99L, "남의 Cycle", LocalDate.of(2026, 8, 13), LocalDate.of(2026, 8, 27), null);
+        ReflectionTestUtils.setField(foreign, "id", 4L);
+
+        when(cycleRepository.findById(CYCLE_ID)).thenReturn(Optional.of(cycle));
+        when(cycleRepository.findById(4L)).thenReturn(Optional.of(foreign));
+
+        assertThatThrownBy(() -> cycleService.changeStatus(
+                CYCLE_ID, new CycleRequest.ChangeStatus(CycleStatus.COMPLETED, true, 4L)))
+                .isInstanceOf(CustomException.class)
+                .hasMessage("다른 프로젝트의 사이클로는 이관할 수 없습니다.")
+                .extracting(e -> ((CustomException) e).getErrorCode())
+                .isEqualTo(ErrorCode.CYCLE_INVALID_INPUT);
+
+        verify(cycleIssuePort, never()).moveUnfinishedIssues(any(), any());
     }
 
     @Test
@@ -182,7 +236,8 @@ class CycleServiceTest {
         Cycle cycle = cycle(CYCLE_ID, LocalDate.of(2026, 7, 29), LocalDate.of(2026, 8, 12));
         cycle.changeStatus(CycleStatus.IN_PROGRESS);
         when(cycleRepository.findById(CYCLE_ID)).thenReturn(Optional.of(cycle));
-        when(cycleRepository.existsById(4L)).thenReturn(true);
+        when(cycleRepository.findById(4L)).thenReturn(Optional.of(cycle(4L,
+                LocalDate.of(2026, 8, 13), LocalDate.of(2026, 8, 27))));
         when(cycleIssuePort.moveUnfinishedIssues(CYCLE_ID, 4L)).thenReturn(4);
 
         CycleResponse.StatusChanged response = cycleService.changeStatus(

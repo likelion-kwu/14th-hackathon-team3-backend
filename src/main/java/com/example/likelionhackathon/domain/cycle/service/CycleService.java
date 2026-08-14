@@ -9,6 +9,7 @@ import com.example.likelionhackathon.domain.cycle.entity.CycleEnums.CycleStatus;
 import com.example.likelionhackathon.domain.cycle.repository.CycleAiAnalysisRepository;
 import com.example.likelionhackathon.domain.cycle.repository.CycleRepository;
 import com.example.likelionhackathon.domain.cycle.service.CycleIssuePort.IssueStats;
+import com.example.likelionhackathon.domain.project.service.ProjectAccessService;
 import com.example.likelionhackathon.global.error.ErrorCode;
 import com.example.likelionhackathon.global.error.exception.CustomException;
 import lombok.RequiredArgsConstructor;
@@ -28,8 +29,11 @@ public class CycleService {
     private final CycleRepository cycleRepository;
     private final CycleAiAnalysisRepository cycleAiAnalysisRepository;
     private final CycleIssuePort cycleIssuePort;
+    private final ProjectAccessService projectAccessService;
 
     public List<CycleResponse.Summary> getCycles(Long projectId, CycleStatus status) {
+        requireProjectAccess(projectId);
+
         List<Cycle> cycles = (status == null)
                 ? cycleRepository.findByProjectIdOrderByStartDateAsc(projectId)
                 : cycleRepository.findByProjectIdAndStatusOrderByStartDateAsc(projectId, status);
@@ -41,6 +45,7 @@ public class CycleService {
 
     @Transactional
     public CycleResponse.Created create(Long projectId, CycleRequest.Create request) {
+        requireProjectAccess(projectId);
         validatePeriod(request.startDate(), request.endDate());
 
         boolean overlapped = cycleRepository
@@ -111,7 +116,7 @@ public class CycleService {
 
         int movedIssueCount = 0;
         if (request.shouldMoveUnfinishedIssues()) {
-            movedIssueCount = moveUnfinishedIssues(cycleId, request.targetCycleId());
+            movedIssueCount = moveUnfinishedIssues(cycle, request.targetCycleId());
         }
 
         cycle.changeStatus(request.status());
@@ -130,18 +135,23 @@ public class CycleService {
         cycleRepository.delete(cycle);
     }
 
-    private int moveUnfinishedIssues(Long cycleId, Long targetCycleId) {
+    private int moveUnfinishedIssues(Cycle cycle, Long targetCycleId) {
         if (targetCycleId == null) {
             throw new CustomException(ErrorCode.CYCLE_INVALID_INPUT, "이관 대상 사이클을 지정해주세요.");
         }
-        if (targetCycleId.equals(cycleId)) {
+        if (targetCycleId.equals(cycle.getId())) {
             throw new CustomException(ErrorCode.CYCLE_INVALID_INPUT, "이관 대상 사이클이 현재 사이클과 같습니다.");
         }
-        if (!cycleRepository.existsById(targetCycleId)) {
-            throw new CustomException(ErrorCode.CYCLE_NOT_FOUND, "이관 대상 사이클을 찾을 수 없습니다.");
+
+        Cycle target = cycleRepository.findById(targetCycleId)
+                .orElseThrow(() -> new CustomException(ErrorCode.CYCLE_NOT_FOUND, "이관 대상 사이클을 찾을 수 없습니다."));
+
+        // 다른 프로젝트의 사이클로 업무가 새어 나가지 않도록 막는다.
+        if (!target.getProjectId().equals(cycle.getProjectId())) {
+            throw new CustomException(ErrorCode.CYCLE_INVALID_INPUT, "다른 프로젝트의 사이클로는 이관할 수 없습니다.");
         }
 
-        return cycleIssuePort.moveUnfinishedIssues(cycleId, targetCycleId);
+        return cycleIssuePort.moveUnfinishedIssues(cycle.getId(), targetCycleId);
     }
 
     private void validatePeriod(LocalDate startDate, LocalDate endDate) {
@@ -157,8 +167,19 @@ public class CycleService {
                 .orElse(null);
     }
 
+    /**
+     * 사이클을 찾고 그 사이클이 속한 프로젝트에 접근 권한이 있는지까지 확인한다.
+     * cycleId 로 들어오는 모든 작업이 이 메서드를 거치므로 권한 검사를 빠뜨릴 수 없다.
+     */
     private Cycle findCycle(Long cycleId) {
-        return cycleRepository.findById(cycleId)
+        Cycle cycle = cycleRepository.findById(cycleId)
                 .orElseThrow(() -> new CustomException(ErrorCode.CYCLE_NOT_FOUND));
+        requireProjectAccess(cycle.getProjectId());
+        return cycle;
+    }
+
+    private void requireProjectAccess(Long projectId) {
+        projectAccessService.findProject(projectId);
+        projectAccessService.requireAccess(projectId);
     }
 }

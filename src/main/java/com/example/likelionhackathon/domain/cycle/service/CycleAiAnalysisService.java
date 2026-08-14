@@ -2,10 +2,12 @@ package com.example.likelionhackathon.domain.cycle.service;
 
 import com.example.likelionhackathon.domain.cycle.dto.CycleRequest;
 import com.example.likelionhackathon.domain.cycle.dto.CycleResponse;
+import com.example.likelionhackathon.domain.cycle.entity.Cycle;
 import com.example.likelionhackathon.domain.cycle.entity.CycleAiAnalysis;
 import com.example.likelionhackathon.domain.cycle.entity.CycleEnums.AnalysisStatus;
 import com.example.likelionhackathon.domain.cycle.repository.CycleAiAnalysisRepository;
 import com.example.likelionhackathon.domain.cycle.repository.CycleRepository;
+import com.example.likelionhackathon.domain.project.service.ProjectAccessService;
 import com.example.likelionhackathon.global.error.ErrorCode;
 import com.example.likelionhackathon.global.error.exception.CustomException;
 import lombok.RequiredArgsConstructor;
@@ -26,12 +28,11 @@ public class CycleAiAnalysisService {
 
     private final CycleAiAnalysisRepository cycleAiAnalysisRepository;
     private final CycleRepository cycleRepository;
+    private final ProjectAccessService projectAccessService;
     private final ApplicationEventPublisher eventPublisher;
 
     public CycleResponse.Analysis getAnalysis(Long cycleId) {
-        if (!cycleRepository.existsById(cycleId)) {
-            throw new CustomException(ErrorCode.CYCLE_NOT_FOUND);
-        }
+        requireCycleAccess(cycleId);
 
         CycleAiAnalysis analysis = cycleAiAnalysisRepository
                 .findFirstByCycleIdAndStatusOrderByAnalyzedAtDesc(cycleId, AnalysisStatus.COMPLETED)
@@ -42,9 +43,7 @@ public class CycleAiAnalysisService {
 
     @Transactional
     public CycleResponse.AnalysisJob runAnalysis(Long cycleId, CycleRequest.RunAnalysis request) {
-        if (!cycleRepository.existsById(cycleId)) {
-            throw new CustomException(ErrorCode.CYCLE_NOT_FOUND);
-        }
+        requireCycleAccess(cycleId);
 
         boolean forced = request != null && request.isForced();
         if (!forced && cycleAiAnalysisRepository.existsByCycleIdAndStatusIn(cycleId, RUNNING_STATUSES)) {
@@ -63,5 +62,12 @@ public class CycleAiAnalysisService {
         eventPublisher.publishEvent(new CycleAnalysisRequestedEvent(analysis.getId()));
 
         return new CycleResponse.AnalysisJob(analysis.getId(), analysis.getStatus(), ESTIMATED_SECONDS);
+    }
+
+    private void requireCycleAccess(Long cycleId) {
+        Cycle cycle = cycleRepository.findById(cycleId)
+                .orElseThrow(() -> new CustomException(ErrorCode.CYCLE_NOT_FOUND));
+        projectAccessService.findProject(cycle.getProjectId());
+        projectAccessService.requireAccess(cycle.getProjectId());
     }
 }
