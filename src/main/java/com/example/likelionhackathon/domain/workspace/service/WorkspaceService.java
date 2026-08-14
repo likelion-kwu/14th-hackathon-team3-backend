@@ -308,6 +308,7 @@ public class WorkspaceService {
         return new WorkspaceResponse.OrganizationMember(
                 member.getId(),
                 member.getName(),
+                member.getEmail(),
                 member.getCompanyName(),
                 member.getJobTitle(),
                 user.getActivityStatus()

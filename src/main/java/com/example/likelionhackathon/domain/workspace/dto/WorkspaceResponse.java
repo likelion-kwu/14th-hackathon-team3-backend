@@ -129,6 +129,7 @@ public final class WorkspaceResponse {
     public record OrganizationMember(
             Long memberId,
             String name,
+            String email,
             String companyName,
             String jobTitle,
             ActivityStatus activityStatus
