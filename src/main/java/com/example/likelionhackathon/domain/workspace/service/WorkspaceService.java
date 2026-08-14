@@ -53,6 +53,7 @@ public class WorkspaceService {
     private final WorkspaceMemberRepository memberRepository;
     private final WorkspaceInvitationRepository invitationRepository;
     private final CurrentUserProvider currentUserProvider;
+    private final WorkspaceProjectCounter projectCounter;
 
     @Value("${workspace.invitation-base-url:https://relai.example.com/invite}")
     private String invitationBaseUrl;
@@ -133,7 +134,7 @@ public class WorkspaceService {
                         workspaceId,
                         WorkspaceMemberStatus.ACTIVE
                 ),
-                0L,
+                projectCounter.countByWorkspaceId(workspaceId),
                 workspace.getStatus()
         );
     }
