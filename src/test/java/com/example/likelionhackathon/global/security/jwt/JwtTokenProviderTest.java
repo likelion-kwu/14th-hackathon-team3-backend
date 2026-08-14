@@ -40,10 +40,9 @@ class JwtTokenProviderTest {
     }
 
     @Test
-    void expiredTokenIsInvalid() throws InterruptedException {
-        JwtTokenProvider shortLivedProvider = new JwtTokenProvider(TEST_SECRET, 1L);
-        String token = shortLivedProvider.createAccessToken(42L);
-        Thread.sleep(10L);
-        assertThat(shortLivedProvider.isValid(token)).isFalse();
+    void expiredTokenIsInvalid() {
+        JwtTokenProvider expiredProvider = new JwtTokenProvider(TEST_SECRET, -60_000L);
+        String token = expiredProvider.createAccessToken(42L);
+        assertThat(expiredProvider.isValid(token)).isFalse();
     }
 }
