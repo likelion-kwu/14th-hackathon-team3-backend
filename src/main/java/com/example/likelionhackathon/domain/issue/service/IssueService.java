@@ -47,6 +47,7 @@ public class IssueService {
 
     private static final Set<String> SORTABLE_FIELDS =
             Set.of("createdAt", "dueDate", "priority", "title", "status");
+    private static final int MAX_PAGE_SIZE = 100;
 
     private final IssueRepository issueRepository;
     private final CycleRepository cycleRepository;
@@ -66,6 +67,8 @@ public class IssueService {
             int size
     ) {
         findCycle(cycleId);
+
+        validatePaging(page, size);
 
         List<IssueStatus> statuses = parseStatuses(status);
         IssuePriority parsedPriority = parsePriority(priority);
@@ -156,8 +159,13 @@ public class IssueService {
                 request.dueDate()
         );
 
-        replaceChecklist(issue, request.safeChecklist());
-        issue.replaceAttachments(toAttachments(request.safeAttachments()));
+        // 필드를 생략하면 기존 값을 유지한다. 빈 배열을 보내야 전체 삭제다.
+        if (request.checklist() != null) {
+            replaceChecklist(issue, request.checklist());
+        }
+        if (request.attachments() != null) {
+            issue.replaceAttachments(toAttachments(request.attachments()));
+        }
 
         return IssueResponse.Updated.of(issue);
     }
@@ -205,6 +213,10 @@ public class IssueService {
         }
 
         Issue issue = findIssue(issueId);
+        if (issue.isClosed()) {
+            throw new CustomException(ErrorCode.ISSUE_CONFLICT, "완료 또는 취소된 이슈는 수정할 수 없습니다.");
+        }
+
         IssueChecklistItem item = issue.findChecklistItem(itemId)
                 .orElseThrow(() -> new CustomException(ErrorCode.ISSUE_NOT_FOUND, "존재하지 않는 완료 조건입니다."));
 
@@ -305,6 +317,16 @@ public class IssueService {
 
             return builder.and(predicates.toArray(new Predicate[0]));
         };
+    }
+
+    /**
+     * PageRequest.of 는 잘못된 값에 IllegalArgumentException 을 던져 500 으로 나간다.
+     * 400 으로 응답하도록 먼저 확인한다.
+     */
+    private void validatePaging(int page, int size) {
+        if (page < 0 || size < 1 || size > MAX_PAGE_SIZE) {
+            throw new CustomException(ErrorCode.ISSUE_INVALID_INPUT, "페이지 번호 또는 크기가 올바르지 않습니다.");
+        }
     }
 
     private List<IssueStatus> parseStatuses(List<String> status) {
