@@ -125,6 +125,84 @@ class IssueServiceTest {
     }
 
     @Test
+    void updateKeepsChecklistAndAttachmentsWhenOmitted() {
+        Issue issue = issue();
+        addChecklistItem(issue, 1L, "기존 항목", true, 0);
+        issue.replaceAttachments(List.of(
+                new IssueAttachment("QA.pdf", null, "http://localhost:8080/api/v1/issues/files/abc_QA.pdf")));
+
+        when(issueRepository.findById(ISSUE_ID)).thenReturn(Optional.of(issue));
+        when(cycleRepository.findById(CYCLE_ID)).thenReturn(Optional.of(cycle()));
+        when(issueMemberPort.isProjectMember(CYCLE_ID, ASSIGNEE_ID)).thenReturn(true);
+
+        // checklist·attachments 를 아예 보내지 않은 요청
+        IssueRequest.Update request = new IssueRequest.Update(
+                CYCLE_ID, "제목만 수정", IssuePriority.HIGH, "설명", null, ASSIGNEE_ID,
+                LocalDate.of(2026, 8, 6), null);
+
+        issueService.update(ISSUE_ID, request);
+
+        assertThat(issue.getChecklist()).hasSize(1);
+        assertThat(issue.getAttachments()).hasSize(1);
+    }
+
+    @Test
+    void updateClearsChecklistAndAttachmentsWhenEmptyListGiven() {
+        Issue issue = issue();
+        addChecklistItem(issue, 1L, "기존 항목", true, 0);
+        issue.replaceAttachments(List.of(
+                new IssueAttachment("QA.pdf", null, "http://localhost:8080/api/v1/issues/files/abc_QA.pdf")));
+
+        when(issueRepository.findById(ISSUE_ID)).thenReturn(Optional.of(issue));
+        when(cycleRepository.findById(CYCLE_ID)).thenReturn(Optional.of(cycle()));
+        when(issueMemberPort.isProjectMember(CYCLE_ID, ASSIGNEE_ID)).thenReturn(true);
+
+        IssueRequest.Update request = new IssueRequest.Update(
+                CYCLE_ID, "제목", IssuePriority.HIGH, "설명", List.of(), ASSIGNEE_ID,
+                LocalDate.of(2026, 8, 6), List.of());
+
+        issueService.update(ISSUE_ID, request);
+
+        assertThat(issue.getChecklist()).isEmpty();
+        assertThat(issue.getAttachments()).isEmpty();
+    }
+
+    @Test
+    void checkItemRejectsClosedIssue() {
+        Issue issue = issue();
+        addChecklistItem(issue, 1L, "항목", false, 0);
+        issue.changeStatus(IssueStatus.DONE);
+        when(issueRepository.findById(ISSUE_ID)).thenReturn(Optional.of(issue));
+        when(cycleRepository.findById(CYCLE_ID)).thenReturn(Optional.of(cycle()));
+
+        assertThatThrownBy(() -> issueService.checkItem(ISSUE_ID, 1L, new IssueRequest.CheckItem(true)))
+                .isInstanceOf(CustomException.class)
+                .hasMessage("완료 또는 취소된 이슈는 수정할 수 없습니다.")
+                .extracting(e -> ((CustomException) e).getErrorCode())
+                .isEqualTo(ErrorCode.ISSUE_CONFLICT);
+    }
+
+    @Test
+    void getIssuesRejectsInvalidPaging() {
+        when(cycleRepository.findById(CYCLE_ID)).thenReturn(Optional.of(cycle()));
+
+        assertThatThrownBy(() -> issueService.getIssues(CYCLE_ID, null, null, null, null, null, -1, 20))
+                .isInstanceOf(CustomException.class)
+                .extracting(e -> ((CustomException) e).getErrorCode())
+                .isEqualTo(ErrorCode.ISSUE_INVALID_INPUT);
+
+        assertThatThrownBy(() -> issueService.getIssues(CYCLE_ID, null, null, null, null, null, 0, 0))
+                .isInstanceOf(CustomException.class)
+                .extracting(e -> ((CustomException) e).getErrorCode())
+                .isEqualTo(ErrorCode.ISSUE_INVALID_INPUT);
+
+        assertThatThrownBy(() -> issueService.getIssues(CYCLE_ID, null, null, null, null, null, 0, 500))
+                .isInstanceOf(CustomException.class)
+                .extracting(e -> ((CustomException) e).getErrorCode())
+                .isEqualTo(ErrorCode.ISSUE_INVALID_INPUT);
+    }
+
+    @Test
     void createRejectsMissingRequiredFields() {
         IssueRequest.Create request = new IssueRequest.Create(
                 CYCLE_ID, "  ", IssuePriority.URGENT, "설명", null, ASSIGNEE_ID,
@@ -283,7 +361,7 @@ class IssueServiceTest {
 
         assertThat(response.previousStatus()).isEqualTo(IssueStatus.IN_PROGRESS);
         assertThat(response.status()).isEqualTo(IssueStatus.DONE);
-        assertThat(response.cycleProgressRate()).isEqualTo(82); // 9 / 11
+        assertThat(response.cycleProgressRate()).isEqualTo(81); // 9 / 11 을 내림
         verify(cycleActivityService).record(any());
     }
 

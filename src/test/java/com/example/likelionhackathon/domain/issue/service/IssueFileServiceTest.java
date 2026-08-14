@@ -1,7 +1,14 @@
 package com.example.likelionhackathon.domain.issue.service;
 
+import com.example.likelionhackathon.domain.cycle.entity.Cycle;
+import com.example.likelionhackathon.domain.cycle.repository.CycleRepository;
 import com.example.likelionhackathon.domain.issue.dto.IssueResponse;
+import com.example.likelionhackathon.domain.issue.entity.Issue;
+import com.example.likelionhackathon.domain.issue.entity.IssueAttachment;
+import com.example.likelionhackathon.domain.issue.entity.IssueEnums.IssuePriority;
+import com.example.likelionhackathon.domain.issue.repository.IssueAttachmentRepository;
 import com.example.likelionhackathon.domain.issue.service.FileStoragePort.StoredFile;
+import com.example.likelionhackathon.domain.project.service.ProjectAccessService;
 import com.example.likelionhackathon.global.error.ErrorCode;
 import com.example.likelionhackathon.global.error.exception.CustomException;
 import org.junit.jupiter.api.BeforeEach;
@@ -10,13 +17,17 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -24,14 +35,80 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class IssueFileServiceTest {
 
+    private static final String STORED_NAME = "dccaa16257b34b1f9fc1787af48d7bd5_QA_Result_v2.pdf";
+    private static final Long PROJECT_ID = 1L;
+    private static final Long CYCLE_ID = 3L;
+
     @Mock
     private FileStoragePort fileStoragePort;
+
+    @Mock
+    private IssueAttachmentRepository issueAttachmentRepository;
+
+    @Mock
+    private CycleRepository cycleRepository;
+
+    @Mock
+    private ProjectAccessService projectAccessService;
 
     private IssueFileService issueFileService;
 
     @BeforeEach
     void setUp() {
-        issueFileService = new IssueFileService(fileStoragePort);
+        issueFileService = new IssueFileService(
+                fileStoragePort, issueAttachmentRepository, cycleRepository, projectAccessService);
+    }
+
+    @Test
+    void downloadRejectsNonProjectMemberForAttachedFile() {
+        when(issueAttachmentRepository.findByFileUrlEndingWith("/" + STORED_NAME))
+                .thenReturn(List.of(attachment()));
+        when(cycleRepository.findById(CYCLE_ID)).thenReturn(Optional.of(cycle()));
+        doThrow(new CustomException(ErrorCode.PROJECT_ACCESS_DENIED))
+                .when(projectAccessService).requireAccess(PROJECT_ID);
+
+        assertThatThrownBy(() -> issueFileService.download(STORED_NAME))
+                .isInstanceOf(CustomException.class)
+                .extracting(e -> ((CustomException) e).getErrorCode())
+                .isEqualTo(ErrorCode.PROJECT_ACCESS_DENIED);
+
+        verify(fileStoragePort, never()).load(any());
+    }
+
+    @Test
+    void downloadAllowsProjectMemberForAttachedFile() {
+        when(issueAttachmentRepository.findByFileUrlEndingWith("/" + STORED_NAME))
+                .thenReturn(List.of(attachment()));
+        when(cycleRepository.findById(CYCLE_ID)).thenReturn(Optional.of(cycle()));
+
+        issueFileService.download(STORED_NAME);
+
+        verify(fileStoragePort).load(STORED_NAME);
+    }
+
+    @Test
+    void downloadAllowsFileNotYetAttachedToAnyIssue() {
+        when(issueAttachmentRepository.findByFileUrlEndingWith("/" + STORED_NAME)).thenReturn(List.of());
+
+        issueFileService.download(STORED_NAME);
+
+        verify(fileStoragePort).load(STORED_NAME);
+    }
+
+    private IssueAttachment attachment() {
+        IssueAttachment attachment = new IssueAttachment(
+                "QA_Result_v2.pdf", 100L, "http://localhost:8080/api/v1/issues/files/" + STORED_NAME);
+        Issue issue = Issue.create(
+                CYCLE_ID, "제목", "설명", IssuePriority.HIGH, 1L, LocalDate.of(2026, 8, 6));
+        issue.replaceAttachments(List.of(attachment));
+        return attachment;
+    }
+
+    private Cycle cycle() {
+        Cycle cycle = Cycle.create(
+                PROJECT_ID, "Cycle 3", LocalDate.of(2026, 7, 29), LocalDate.of(2026, 8, 12), null);
+        ReflectionTestUtils.setField(cycle, "id", CYCLE_ID);
+        return cycle;
     }
 
     @Test
