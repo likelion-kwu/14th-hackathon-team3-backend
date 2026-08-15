@@ -1,6 +1,8 @@
 package com.example.likelionhackathon.domain.issue.service;
 
 import com.example.likelionhackathon.domain.cycle.entity.Cycle;
+import com.example.likelionhackathon.domain.cycle.entity.CycleActivity;
+import com.example.likelionhackathon.domain.cycle.entity.CycleEnums.ActivityType;
 import com.example.likelionhackathon.domain.cycle.repository.CycleRepository;
 import com.example.likelionhackathon.domain.cycle.service.CycleActivityService;
 import com.example.likelionhackathon.domain.cycle.service.CycleIssuePort;
@@ -35,6 +37,7 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -200,6 +203,98 @@ class IssueServiceTest {
                 .isInstanceOf(CustomException.class)
                 .extracting(e -> ((CustomException) e).getErrorCode())
                 .isEqualTo(ErrorCode.ISSUE_INVALID_INPUT);
+    }
+
+    @Test
+    void changeStatusRecordsCommentAsReasonAndCurrentUserAsActor() {
+        Issue issue = issue();
+        issue.changeStatus(IssueStatus.IN_PROGRESS);
+        addChecklistItem(issue, 1L, "완료된 항목", true, 0);
+
+        when(issueRepository.findById(ISSUE_ID)).thenReturn(Optional.of(issue));
+        when(cycleRepository.findById(CYCLE_ID)).thenReturn(Optional.of(cycle()));
+        when(issueMemberPort.findCurrentMember(CYCLE_ID))
+                .thenReturn(Optional.of(new IssueMemberPort.MemberProfile(5L, "김민준", null, null, null)));
+        when(cycleIssuePort.statsOf(CYCLE_ID)).thenReturn(new IssueStats(2, 1, 1, 0, 0));
+
+        issueService.changeStatus(ISSUE_ID, new IssueRequest.ChangeStatus(IssueStatus.DONE, "마케팅팀 최종 승인 완료"));
+
+        ArgumentCaptor<CycleActivity> captor = ArgumentCaptor.forClass(CycleActivity.class);
+        verify(cycleActivityService).record(captor.capture());
+        CycleActivity recorded = captor.getValue();
+        assertThat(recorded.getType()).isEqualTo(ActivityType.ISSUE_STATUS_CHANGED);
+        assertThat(recorded.getActorName()).isEqualTo("김민준");
+        assertThat(recorded.getReason()).isEqualTo("마케팅팀 최종 승인 완료");
+        assertThat(recorded.getBeforeValue()).isEqualTo("IN_PROGRESS");
+        assertThat(recorded.getAfterValue()).isEqualTo("DONE");
+    }
+
+    @Test
+    void changeStatusLeavesReasonEmptyWhenCommentOmitted() {
+        Issue issue = issue();
+        issue.changeStatus(IssueStatus.IN_PROGRESS);
+
+        when(issueRepository.findById(ISSUE_ID)).thenReturn(Optional.of(issue));
+        when(cycleRepository.findById(CYCLE_ID)).thenReturn(Optional.of(cycle()));
+        when(cycleIssuePort.statsOf(CYCLE_ID)).thenReturn(new IssueStats(1, 1, 0, 0, 0));
+
+        issueService.changeStatus(ISSUE_ID, new IssueRequest.ChangeStatus(IssueStatus.DONE, null));
+
+        ArgumentCaptor<CycleActivity> captor = ArgumentCaptor.forClass(CycleActivity.class);
+        verify(cycleActivityService).record(captor.capture());
+        assertThat(captor.getValue().getReason()).isNull();
+        assertThat(captor.getValue().getActorName()).isEqualTo("알 수 없는 사용자");
+    }
+
+    @Test
+    void createRecordsFileUploadedActivityPerAttachment() {
+        when(cycleRepository.findById(CYCLE_ID)).thenReturn(Optional.of(cycle()));
+        when(issueMemberPort.isProjectMember(CYCLE_ID, ASSIGNEE_ID)).thenReturn(true);
+        when(issueMemberPort.findCurrentMember(CYCLE_ID))
+                .thenReturn(Optional.of(new IssueMemberPort.MemberProfile(5L, "김서연", null, null, null)));
+        when(issueRepository.save(any(Issue.class))).thenAnswer(invocation -> {
+            Issue saved = invocation.getArgument(0);
+            ReflectionTestUtils.setField(saved, "id", ISSUE_ID);
+            return saved;
+        });
+
+        issueService.create(new IssueRequest.Create(
+                CYCLE_ID, "제목", IssuePriority.HIGH, "설명", null, ASSIGNEE_ID, LocalDate.of(2026, 8, 6),
+                List.of("http://localhost:8080/api/v1/issues/files/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_QA.pdf",
+                        "http://localhost:8080/api/v1/issues/files/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb_Report.xlsx")));
+
+        ArgumentCaptor<CycleActivity> captor = ArgumentCaptor.forClass(CycleActivity.class);
+        verify(cycleActivityService, times(2)).record(captor.capture());
+        assertThat(captor.getAllValues())
+                .allSatisfy(a -> {
+                    assertThat(a.getType()).isEqualTo(ActivityType.FILE_UPLOADED);
+                    assertThat(a.getActorName()).isEqualTo("김서연");
+                })
+                .extracting(CycleActivity::getFileName)
+                .containsExactly("QA.pdf", "Report.xlsx");
+    }
+
+    @Test
+    void updateRecordsFileUploadedOnlyForNewlyAddedAttachments() {
+        Issue issue = issue();
+        issue.replaceAttachments(List.of(new IssueAttachment(
+                "QA.pdf", null, "http://localhost:8080/api/v1/issues/files/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_QA.pdf")));
+
+        when(issueRepository.findById(ISSUE_ID)).thenReturn(Optional.of(issue));
+        when(cycleRepository.findById(CYCLE_ID)).thenReturn(Optional.of(cycle()));
+        when(issueMemberPort.isProjectMember(CYCLE_ID, ASSIGNEE_ID)).thenReturn(true);
+        when(issueMemberPort.findCurrentMember(CYCLE_ID))
+                .thenReturn(Optional.of(new IssueMemberPort.MemberProfile(5L, "김서연", null, null, null)));
+
+        // 기존 파일 1개는 유지하고 새 파일 1개만 추가
+        issueService.update(ISSUE_ID, new IssueRequest.Update(
+                CYCLE_ID, "제목", IssuePriority.HIGH, "설명", null, ASSIGNEE_ID, LocalDate.of(2026, 8, 6),
+                List.of("http://localhost:8080/api/v1/issues/files/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_QA.pdf",
+                        "http://localhost:8080/api/v1/issues/files/cccccccccccccccccccccccccccccccc_New.pdf")));
+
+        ArgumentCaptor<CycleActivity> captor = ArgumentCaptor.forClass(CycleActivity.class);
+        verify(cycleActivityService, times(1)).record(captor.capture());
+        assertThat(captor.getValue().getFileName()).isEqualTo("New.pdf");
     }
 
     @Test

@@ -78,7 +78,8 @@ public class CycleActivity {
             Long issueId,
             String issueTitle,
             String before,
-            String after
+            String after,
+            String reason
     ) {
         CycleActivity activity = new CycleActivity(
                 cycleId, ActivityType.ISSUE_STATUS_CHANGED, occurredAt, actorName,
@@ -88,6 +89,8 @@ public class CycleActivity {
         activity.issueTitle = issueTitle;
         activity.beforeValue = before;
         activity.afterValue = after;
+        // 상태 변경 사유는 선택값이라 비어 있으면 남기지 않는다.
+        activity.reason = (reason == null || reason.isBlank()) ? null : reason;
         return activity;
     }
 

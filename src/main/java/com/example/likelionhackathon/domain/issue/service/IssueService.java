@@ -106,7 +106,10 @@ public class IssueService {
         }
         issue.replaceAttachments(toAttachments(request.safeAttachments()));
 
-        return new IssueResponse.Created(issueRepository.save(issue).getId());
+        Issue saved = issueRepository.save(issue);
+        recordUploadedFiles(saved, saved.getAttachments());
+
+        return new IssueResponse.Created(saved.getId());
     }
 
     public IssueResponse.Detail getDetail(Long issueId) {
@@ -164,7 +167,16 @@ public class IssueService {
             replaceChecklist(issue, request.checklist());
         }
         if (request.attachments() != null) {
+            Set<String> before = issue.getAttachments().stream()
+                    .map(IssueAttachment::getFileUrl)
+                    .collect(Collectors.toSet());
+
             issue.replaceAttachments(toAttachments(request.attachments()));
+
+            List<IssueAttachment> added = issue.getAttachments().stream()
+                    .filter(attachment -> !before.contains(attachment.getFileUrl()))
+                    .toList();
+            recordUploadedFiles(issue, added);
         }
 
         return IssueResponse.Updated.of(issue);
@@ -190,12 +202,13 @@ public class IssueService {
 
         cycleActivityService.record(CycleActivity.issueStatusChanged(
                 issue.getCycleId(),
-                LocalDateTime.now().truncatedTo(ChronoUnit.SECONDS),
-                assigneeNameOrFallback(issue.getAssigneeId()),
+                now(),
+                actorName(issue.getCycleId()),
                 issue.getId(),
                 issue.getTitle(),
                 previousStatus.name(),
-                request.status().name()
+                request.status().name(),
+                request.comment()
         ));
 
         return new IssueResponse.StatusChanged(
@@ -411,9 +424,38 @@ public class IssueService {
                 .orElse(null);
     }
 
-    private String assigneeNameOrFallback(Long assigneeId) {
-        String name = assigneeName(assigneeId);
-        return (name == null || name.isBlank()) ? "담당자" : name;
+    /**
+     * 활동 기록에 남길 행위자. 지금 요청을 보낸 사용자다.
+     */
+    private String actorName(Long cycleId) {
+        return issueMemberPort.findCurrentMember(cycleId)
+                .map(MemberProfile::name)
+                .filter(name -> !name.isBlank())
+                .orElse("알 수 없는 사용자");
+    }
+
+    private LocalDateTime now() {
+        return LocalDateTime.now().truncatedTo(ChronoUnit.SECONDS);
+    }
+
+    /**
+     * 새로 붙은 첨부파일만 활동 기록에 남긴다. 수정 시 기존 파일이 다시 기록되지 않게 한다.
+     */
+    private void recordUploadedFiles(Issue issue, List<IssueAttachment> added) {
+        if (added.isEmpty()) {
+            return;
+        }
+
+        String actor = actorName(issue.getCycleId());
+        LocalDateTime occurredAt = now();
+        added.forEach(attachment -> cycleActivityService.record(CycleActivity.fileUploaded(
+                issue.getCycleId(),
+                occurredAt,
+                actor,
+                issue.getId(),
+                attachment.getFileName(),
+                attachment.getFileSize()
+        )));
     }
 
     /**

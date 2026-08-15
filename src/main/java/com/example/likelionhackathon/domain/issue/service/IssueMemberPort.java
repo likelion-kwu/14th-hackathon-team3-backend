@@ -12,6 +12,12 @@ public interface IssueMemberPort {
 
     Optional<MemberProfile> findProfile(Long memberId);
 
+    /**
+     * 지금 요청을 보낸 사용자를 해당 사이클이 속한 프로젝트의 멤버로 찾는다.
+     * 활동 기록의 행위자 이름에 쓴다.
+     */
+    Optional<MemberProfile> findCurrentMember(Long cycleId);
+
     boolean isProjectMember(Long cycleId, Long memberId);
 
     record MemberProfile(

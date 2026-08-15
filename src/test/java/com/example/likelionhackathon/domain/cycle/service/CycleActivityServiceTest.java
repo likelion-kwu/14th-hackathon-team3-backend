@@ -80,7 +80,7 @@ class CycleActivityServiceTest {
         when(cycleRepository.findById(CYCLE_ID)).thenReturn(Optional.of(cycle()));
         when(cycleActivityRepository.findByCycleIdOrderByOccurredAtDescIdDesc(any(), any())).thenReturn(List.of(
                 CycleActivity.issueStatusChanged(
-                        CYCLE_ID, todayAfternoon, "김민준", 301L, "결제 API v3 연동", "IN_PROGRESS", "DONE"),
+                        CYCLE_ID, todayAfternoon, "김민준", 301L, "결제 API v3 연동", "IN_PROGRESS", "DONE", null),
                 CycleActivity.aiProgressUpdated(CYCLE_ID, todayAfternoon.minusMinutes(22), 72, 78, "갱신"),
                 CycleActivity.fileUploaded(
                         CYCLE_ID, yesterdayMorning, "김서연", 305L, "QA_Result_v2.pdf", 2516582L)
