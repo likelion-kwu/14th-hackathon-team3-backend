@@ -6,6 +6,7 @@ import com.example.likelionhackathon.domain.project.entity.ProjectEnums.ProjectM
 import com.example.likelionhackathon.domain.project.entity.ProjectMember;
 import com.example.likelionhackathon.domain.project.entity.ProjectTeam;
 import com.example.likelionhackathon.domain.project.repository.ProjectMemberRepository;
+import com.example.likelionhackathon.global.security.CurrentUserProvider;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,6 +26,7 @@ public class JpaIssueMemberPort implements IssueMemberPort {
 
     private final ProjectMemberRepository projectMemberRepository;
     private final CycleRepository cycleRepository;
+    private final CurrentUserProvider currentUserProvider;
 
     @Override
     public Optional<MemberProfile> findProfile(Long memberId) {
@@ -33,6 +35,20 @@ public class JpaIssueMemberPort implements IssueMemberPort {
         }
 
         return projectMemberRepository.findById(memberId)
+                .map(member -> new MemberProfile(
+                        member.getId(),
+                        member.getName(),
+                        member.getCompanyName(),
+                        teamNameOf(member),
+                        member.getRole() == null ? null : member.getRole().name()
+                ));
+    }
+
+    @Override
+    public Optional<MemberProfile> findCurrentMember(Long cycleId) {
+        return cycleRepository.findById(cycleId)
+                .flatMap(cycle -> projectMemberRepository.findByProjectIdAndPrincipalKey(
+                        cycle.getProjectId(), currentUserProvider.currentPrincipalKey()))
                 .map(member -> new MemberProfile(
                         member.getId(),
                         member.getName(),
