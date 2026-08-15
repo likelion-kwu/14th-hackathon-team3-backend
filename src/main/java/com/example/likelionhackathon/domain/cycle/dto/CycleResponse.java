@@ -29,9 +29,10 @@ public final class CycleResponse {
             LocalDate startDate,
             LocalDate endDate,
             int progressRate,
+            int plannedProgressRate,
             int issueCount
     ) {
-        public static Summary of(Cycle cycle, IssueStats stats) {
+        public static Summary of(Cycle cycle, IssueStats stats, LocalDate today) {
             return new Summary(
                     cycle.getId(),
                     cycle.getName(),
@@ -39,6 +40,7 @@ public final class CycleResponse {
                     cycle.getStartDate(),
                     cycle.getEndDate(),
                     stats.progressRate(),
+                    cycle.plannedProgressRate(today),
                     stats.totalCount()
             );
         }
@@ -55,6 +57,7 @@ public final class CycleResponse {
             LocalDate endDate,
             long dDay,
             int progressRate,
+            int plannedProgressRate,
             IssueSummary summary,
             NextCycle nextCycle,
             LocalDateTime lastAnalyzedAt

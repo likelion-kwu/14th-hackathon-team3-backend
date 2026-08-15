@@ -41,8 +41,9 @@ public class CycleService {
                 ? cycleRepository.findByProjectIdOrderByStartDateAsc(projectId)
                 : cycleRepository.findByProjectIdAndStatusOrderByStartDateAsc(projectId, status);
 
+        LocalDate today = LocalDate.now();
         return cycles.stream()
-                .map(cycle -> CycleResponse.Summary.of(cycle, cycleIssuePort.statsOf(cycle.getId())))
+                .map(cycle -> CycleResponse.Summary.of(cycle, cycleIssuePort.statsOf(cycle.getId()), today))
                 .toList();
     }
 
@@ -67,6 +68,7 @@ public class CycleService {
     public CycleResponse.Detail getDetail(Long cycleId) {
         Cycle cycle = findCycle(cycleId);
         IssueStats stats = cycleIssuePort.statsOf(cycleId);
+        LocalDate today = LocalDate.now();
 
         CycleResponse.NextCycle nextCycle = cycleRepository
                 .findFirstByProjectIdAndStartDateGreaterThanOrderByStartDateAsc(
@@ -80,8 +82,9 @@ public class CycleService {
                 cycle.getStatus(),
                 cycle.getStartDate(),
                 cycle.getEndDate(),
-                ChronoUnit.DAYS.between(LocalDate.now(), cycle.getEndDate()),
+                ChronoUnit.DAYS.between(today, cycle.getEndDate()),
                 stats.progressRate(),
+                cycle.plannedProgressRate(today),
                 CycleResponse.IssueSummary.of(stats),
                 nextCycle,
                 lastAnalyzedAt(cycleId)
