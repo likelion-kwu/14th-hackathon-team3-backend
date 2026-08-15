@@ -138,6 +138,22 @@ class IssueFileServiceTest {
     }
 
     @Test
+    void acceptsFileNameWithSpacesAndKorean() {
+        MultipartFile file = new MockMultipartFile("files", "QA 결과 v2.pdf", null, new byte[]{1, 2, 3});
+        when(fileStoragePort.store(file)).thenReturn(
+                new StoredFile("QA 결과 v2.pdf", 3L,
+                        "http://localhost:8080/api/v1/issues/files/aaaa_QA%20%EA%B2%B0%EA%B3%BC%20v2.pdf",
+                        "aaaa_QA 결과 v2.pdf"));
+
+        List<IssueResponse.UploadedFile> uploaded = issueFileService.upload(List.of(file));
+
+        verify(fileStoragePort).store(file);
+        assertThat(uploaded).singleElement()
+                .extracting(IssueResponse.UploadedFile::fileName)
+                .isEqualTo("QA 결과 v2.pdf");
+    }
+
+    @Test
     void rejectsFileOverTwentyMegabytes() {
         byte[] oversized = new byte[20 * 1024 * 1024 + 1];
         MultipartFile file = new MockMultipartFile("files", "big.pdf", null, oversized);
