@@ -3,9 +3,9 @@ package com.example.likelionhackathon.domain.cycle.service;
 /**
  * 사이클이 이슈 도메인에 물어봐야 하는 것들을 모아둔 연결부.
  *
- * <p>사이클 명세의 진행률 · 상태별 집계 · 미완료 이슈 이관은 모두 이슈 데이터에 의존하는데,
- * 이슈 도메인은 별도 이슈(#8)에서 구현한다. 그때까지는 {@link EmptyCycleIssuePort} 가
- * 0을 반환하며, #8에서 JPA 구현체로 교체한다.</p>
+ * <p>사이클 명세의 진행률 · 상태별 집계 · 미완료 이슈 이관은 모두 이슈 데이터에 의존한다.
+ * 두 도메인이 서로를 직접 참조하지 않도록 이 인터페이스로 끊고,
+ * 이슈 도메인의 {@code JpaCycleIssuePort} 가 구현한다.</p>
  */
 public interface CycleIssuePort {
 
@@ -18,6 +18,9 @@ public interface CycleIssuePort {
      */
     int moveUnfinishedIssues(Long fromCycleId, Long toCycleId);
 
+    /**
+     * @param totalCount 취소된 이슈를 제외한 전체 개수. 진행률의 분모다.
+     */
     record IssueStats(
             int totalCount,
             int doneCount,
