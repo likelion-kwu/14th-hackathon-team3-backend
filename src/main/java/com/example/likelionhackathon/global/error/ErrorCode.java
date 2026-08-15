@@ -86,7 +86,13 @@ public enum ErrorCode {
     // 상세 사유는 CustomException 의 detailMessage 로 구분한다.
     CYCLE_INVALID_INPUT(HttpStatus.BAD_REQUEST, "400CYCLE", "사이클 입력값이 올바르지 않습니다."),
     CYCLE_NOT_FOUND(HttpStatus.NOT_FOUND, "404CYCLE", "존재하지 않는 사이클입니다."),
-    CYCLE_CONFLICT(HttpStatus.CONFLICT, "409CYCLE", "요청을 처리할 수 없는 사이클 상태입니다.");
+    CYCLE_CONFLICT(HttpStatus.CONFLICT, "409CYCLE", "요청을 처리할 수 없는 사이클 상태입니다."),
+
+    // Issue
+    ISSUE_INVALID_INPUT(HttpStatus.BAD_REQUEST, "400ISSUE", "이슈 입력값이 올바르지 않습니다."),
+    ISSUE_NOT_FOUND(HttpStatus.NOT_FOUND, "404ISSUE", "존재하지 않는 이슈입니다."),
+    ISSUE_CONFLICT(HttpStatus.CONFLICT, "409ISSUE", "요청을 처리할 수 없는 이슈 상태입니다."),
+    ISSUE_FILE_TOO_LARGE(HttpStatus.CONTENT_TOO_LARGE, "413ISSUE", "파일 용량이 초과되었습니다.");
 
     private final HttpStatus httpStatus;
     private final String code;
