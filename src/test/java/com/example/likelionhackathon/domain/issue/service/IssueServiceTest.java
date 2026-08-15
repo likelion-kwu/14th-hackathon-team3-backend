@@ -299,6 +299,23 @@ class IssueServiceTest {
     }
 
     @Test
+    void createRejectsAttachmentUrlWithBrokenPercentEscape() {
+        when(cycleRepository.findById(CYCLE_ID)).thenReturn(Optional.of(cycle()));
+        when(issueMemberPort.isProjectMember(CYCLE_ID, ASSIGNEE_ID)).thenReturn(true);
+
+        IssueRequest.Create request = new IssueRequest.Create(
+                CYCLE_ID, "제목", IssuePriority.HIGH, "설명", null, ASSIGNEE_ID,
+                LocalDate.of(2026, 8, 6),
+                List.of("http://localhost:8080/api/v1/issues/files/abc%ZZ.pdf"));
+
+        assertThatThrownBy(() -> issueService.create(request))
+                .isInstanceOf(CustomException.class)
+                .hasMessage("첨부파일 URL이 올바르지 않습니다.")
+                .extracting(e -> ((CustomException) e).getErrorCode())
+                .isEqualTo(ErrorCode.ISSUE_INVALID_INPUT);
+    }
+
+    @Test
     void createRejectsMissingRequiredFields() {
         IssueRequest.Create request = new IssueRequest.Create(
                 CYCLE_ID, "  ", IssuePriority.URGENT, "설명", null, ASSIGNEE_ID,

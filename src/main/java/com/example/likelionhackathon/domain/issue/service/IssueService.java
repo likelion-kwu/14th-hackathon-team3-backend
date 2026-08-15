@@ -299,7 +299,13 @@ public class IssueService {
         if (segment.isBlank()) {
             throw new CustomException(ErrorCode.ISSUE_INVALID_INPUT, "첨부파일 URL이 올바르지 않습니다.");
         }
-        return URLDecoder.decode(segment, StandardCharsets.UTF_8);
+
+        try {
+            return URLDecoder.decode(segment, StandardCharsets.UTF_8);
+        } catch (IllegalArgumentException e) {
+            // %ZZ 처럼 깨진 이스케이프가 들어오면 디코더가 던진다. 500 대신 400 으로 응답한다.
+            throw new CustomException(ErrorCode.ISSUE_INVALID_INPUT, "첨부파일 URL이 올바르지 않습니다.");
+        }
     }
 
     private String toOriginalName(String storedKey) {

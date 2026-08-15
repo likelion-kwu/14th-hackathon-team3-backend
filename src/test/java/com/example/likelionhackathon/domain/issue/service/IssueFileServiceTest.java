@@ -125,6 +125,19 @@ class IssueFileServiceTest {
     }
 
     @Test
+    void rejectsFileNameContainingPathSeparator() {
+        MultipartFile file = new MockMultipartFile("files", "sub/dir/QA.pdf", null, new byte[]{1});
+
+        assertThatThrownBy(() -> issueFileService.upload(List.of(file)))
+                .isInstanceOf(CustomException.class)
+                .hasMessage("파일명이 올바르지 않습니다.")
+                .extracting(e -> ((CustomException) e).getErrorCode())
+                .isEqualTo(ErrorCode.ISSUE_INVALID_INPUT);
+
+        verify(fileStoragePort, never()).store(any());
+    }
+
+    @Test
     void rejectsFileOverTwentyMegabytes() {
         byte[] oversized = new byte[20 * 1024 * 1024 + 1];
         MultipartFile file = new MockMultipartFile("files", "big.pdf", null, oversized);

@@ -112,6 +112,12 @@ public class IssueFileService {
         if (file.isEmpty()) {
             throw new CustomException(ErrorCode.ISSUE_INVALID_INPUT, "빈 파일은 업로드할 수 없습니다.");
         }
+        // 파일명에 구분자가 있으면 저장 키가 평평하지 않게 되어 다운로드 경로로 되돌릴 수 없다.
+        String originalName = file.getOriginalFilename();
+        if (originalName == null || originalName.isBlank()
+                || originalName.contains("/") || originalName.contains("\\")) {
+            throw new CustomException(ErrorCode.ISSUE_INVALID_INPUT, "파일명이 올바르지 않습니다.");
+        }
         if (file.getSize() > MAX_FILE_SIZE) {
             throw new CustomException(ErrorCode.ISSUE_FILE_TOO_LARGE);
         }
