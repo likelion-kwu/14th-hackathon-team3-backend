@@ -132,7 +132,7 @@ class IssueServiceTest {
         Issue issue = issue();
         addChecklistItem(issue, 1L, "기존 항목", true, 0);
         issue.replaceAttachments(List.of(
-                new IssueAttachment("QA.pdf", null, "http://localhost:8080/api/v1/issues/files/abc_QA.pdf")));
+                new IssueAttachment("QA.pdf", null, "http://localhost:8080/api/v1/issues/files/abc_QA.pdf", "abc_QA.pdf")));
 
         when(issueRepository.findById(ISSUE_ID)).thenReturn(Optional.of(issue));
         when(cycleRepository.findById(CYCLE_ID)).thenReturn(Optional.of(cycle()));
@@ -154,7 +154,7 @@ class IssueServiceTest {
         Issue issue = issue();
         addChecklistItem(issue, 1L, "기존 항목", true, 0);
         issue.replaceAttachments(List.of(
-                new IssueAttachment("QA.pdf", null, "http://localhost:8080/api/v1/issues/files/abc_QA.pdf")));
+                new IssueAttachment("QA.pdf", null, "http://localhost:8080/api/v1/issues/files/abc_QA.pdf", "abc_QA.pdf")));
 
         when(issueRepository.findById(ISSUE_ID)).thenReturn(Optional.of(issue));
         when(cycleRepository.findById(CYCLE_ID)).thenReturn(Optional.of(cycle()));
@@ -278,7 +278,8 @@ class IssueServiceTest {
     void updateRecordsFileUploadedOnlyForNewlyAddedAttachments() {
         Issue issue = issue();
         issue.replaceAttachments(List.of(new IssueAttachment(
-                "QA.pdf", null, "http://localhost:8080/api/v1/issues/files/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_QA.pdf")));
+                "QA.pdf", null, "http://localhost:8080/api/v1/issues/files/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_QA.pdf",
+                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_QA.pdf")));
 
         when(issueRepository.findById(ISSUE_ID)).thenReturn(Optional.of(issue));
         when(cycleRepository.findById(CYCLE_ID)).thenReturn(Optional.of(cycle()));

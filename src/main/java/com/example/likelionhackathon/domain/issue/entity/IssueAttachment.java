@@ -33,10 +33,18 @@ public class IssueAttachment {
     @Column(nullable = false, length = 1000)
     private String fileUrl;
 
-    public IssueAttachment(String fileName, Long fileSize, String fileUrl) {
+    /**
+     * 저장소에서 이 파일을 가리키는 키. 다운로드 권한 확인에 쓴다.
+     * URL 문자열을 잘라 맞추면 저장 방식이 바뀔 때 조회가 조용히 빗나가므로 따로 보관한다.
+     */
+    @Column(nullable = false, length = 255)
+    private String storedKey;
+
+    public IssueAttachment(String fileName, Long fileSize, String fileUrl, String storedKey) {
         this.fileName = fileName;
         this.fileSize = fileSize;
         this.fileUrl = fileUrl;
+        this.storedKey = storedKey;
     }
 
     void attachTo(Issue issue) {

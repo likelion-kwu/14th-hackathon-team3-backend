@@ -68,9 +68,8 @@ public class IssueFileService {
      * 이슈 생성 화면에서 방금 올린 파일을 미리 보려면 필요하고,
      * 저장 파일명에 32자리 임의 값이 들어가 남이 추측할 수 없다.</p>
      */
-    private void requireAttachmentAccess(String storedName) {
-        List<IssueAttachment> attachments =
-                issueAttachmentRepository.findByFileUrlEndingWith("/" + storedName);
+    private void requireAttachmentAccess(String storedKey) {
+        List<IssueAttachment> attachments = issueAttachmentRepository.findByStoredKey(storedKey);
         if (attachments.isEmpty()) {
             return;
         }

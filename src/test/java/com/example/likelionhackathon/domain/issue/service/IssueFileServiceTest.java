@@ -61,7 +61,7 @@ class IssueFileServiceTest {
 
     @Test
     void downloadRejectsNonProjectMemberForAttachedFile() {
-        when(issueAttachmentRepository.findByFileUrlEndingWith("/" + STORED_NAME))
+        when(issueAttachmentRepository.findByStoredKey(STORED_NAME))
                 .thenReturn(List.of(attachment()));
         when(cycleRepository.findById(CYCLE_ID)).thenReturn(Optional.of(cycle()));
         doThrow(new CustomException(ErrorCode.PROJECT_ACCESS_DENIED))
@@ -77,7 +77,7 @@ class IssueFileServiceTest {
 
     @Test
     void downloadAllowsProjectMemberForAttachedFile() {
-        when(issueAttachmentRepository.findByFileUrlEndingWith("/" + STORED_NAME))
+        when(issueAttachmentRepository.findByStoredKey(STORED_NAME))
                 .thenReturn(List.of(attachment()));
         when(cycleRepository.findById(CYCLE_ID)).thenReturn(Optional.of(cycle()));
 
@@ -88,7 +88,7 @@ class IssueFileServiceTest {
 
     @Test
     void downloadAllowsFileNotYetAttachedToAnyIssue() {
-        when(issueAttachmentRepository.findByFileUrlEndingWith("/" + STORED_NAME)).thenReturn(List.of());
+        when(issueAttachmentRepository.findByStoredKey(STORED_NAME)).thenReturn(List.of());
 
         issueFileService.download(STORED_NAME);
 
@@ -97,7 +97,7 @@ class IssueFileServiceTest {
 
     private IssueAttachment attachment() {
         IssueAttachment attachment = new IssueAttachment(
-                "QA_Result_v2.pdf", 100L, "http://localhost:8080/api/v1/issues/files/" + STORED_NAME);
+                "QA_Result_v2.pdf", 100L, "http://localhost:8080/api/v1/issues/files/" + STORED_NAME, STORED_NAME);
         Issue issue = Issue.create(
                 CYCLE_ID, "제목", "설명", IssuePriority.HIGH, 1L, LocalDate.of(2026, 8, 6));
         issue.replaceAttachments(List.of(attachment));
@@ -169,7 +169,7 @@ class IssueFileServiceTest {
     void returnsStoredFileInfo() {
         MultipartFile file = new MockMultipartFile("files", "QA_Result_v2.pdf", null, new byte[]{1, 2, 3});
         when(fileStoragePort.store(file)).thenReturn(
-                new StoredFile("QA_Result_v2.pdf", 2516582L, "https://example.com/files/qa_result_v2.pdf"));
+                new StoredFile("QA_Result_v2.pdf", 2516582L, "https://example.com/files/qa_result_v2.pdf", "key1"));
 
         List<IssueResponse.UploadedFile> uploaded = issueFileService.upload(List.of(file));
 

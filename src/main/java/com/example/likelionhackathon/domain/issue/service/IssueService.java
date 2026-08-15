@@ -280,24 +280,31 @@ public class IssueService {
             if (fileUrl == null || fileUrl.isBlank()) {
                 throw new CustomException(ErrorCode.ISSUE_INVALID_INPUT, "첨부파일 URL이 올바르지 않습니다.");
             }
-            attachments.add(new IssueAttachment(extractFileName(fileUrl), null, fileUrl));
+            String storedKey = extractStoredKey(fileUrl);
+            attachments.add(new IssueAttachment(toOriginalName(storedKey), null, fileUrl, storedKey));
         }
         return attachments;
     }
 
-    /** 저장 파일명 앞에 붙는 32자리 UUID 접두사. 응답에는 원본 이름만 내보낸다. */
-    private static final Pattern STORED_NAME_PREFIX = Pattern.compile("^[0-9a-f]{32}_(.+)$");
+    /** 저장 키 앞에 붙는 32자리 UUID 접두사. 응답에는 원본 이름만 내보낸다. */
+    private static final Pattern STORED_KEY_PREFIX = Pattern.compile("^[0-9a-f]{32}_(.+)$");
 
-    private String extractFileName(String fileUrl) {
+    /**
+     * 업로드가 돌려준 URL 의 마지막 경로 조각이 저장 키다.
+     * 다운로드 권한 확인에 쓰므로 URL 을 매번 다시 자르지 않고 첨부에 함께 저장한다.
+     */
+    private String extractStoredKey(String fileUrl) {
         int lastSlash = fileUrl.lastIndexOf('/');
-        String fileName = (lastSlash < 0) ? fileUrl : fileUrl.substring(lastSlash + 1);
-        if (fileName.isBlank()) {
-            return fileUrl;
+        String segment = (lastSlash < 0) ? fileUrl : fileUrl.substring(lastSlash + 1);
+        if (segment.isBlank()) {
+            throw new CustomException(ErrorCode.ISSUE_INVALID_INPUT, "첨부파일 URL이 올바르지 않습니다.");
         }
+        return URLDecoder.decode(segment, StandardCharsets.UTF_8);
+    }
 
-        fileName = URLDecoder.decode(fileName, StandardCharsets.UTF_8);
-        Matcher matcher = STORED_NAME_PREFIX.matcher(fileName);
-        return matcher.matches() ? matcher.group(1) : fileName;
+    private String toOriginalName(String storedKey) {
+        Matcher matcher = STORED_KEY_PREFIX.matcher(storedKey);
+        return matcher.matches() ? matcher.group(1) : storedKey;
     }
 
     private Specification<Issue> buildSpecification(
