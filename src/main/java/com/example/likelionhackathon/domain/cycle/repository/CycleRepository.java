@@ -2,7 +2,11 @@ package com.example.likelionhackathon.domain.cycle.repository;
 
 import com.example.likelionhackathon.domain.cycle.entity.Cycle;
 import com.example.likelionhackathon.domain.cycle.entity.CycleEnums.CycleStatus;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -35,4 +39,14 @@ public interface CycleRepository extends JpaRepository<Cycle, Long> {
             Long projectId,
             LocalDate startDate
     );
+
+    /**
+     * 같은 사이클에 동시에 들어온 AI 분석 요청을 줄 세우기 위한 잠금.
+     *
+     * <p>잠그지 않으면 여러 요청이 "진행 중인 분석이 있는지" 를 서로의 커밋 전에 읽어
+     * 전부 통과한다. 그러면 분석이 중복 실행되고 활동 기록에도 같은 줄이 여러 번 쌓인다.</p>
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select c from Cycle c where c.id = :cycleId")
+    Optional<Cycle> findByIdForUpdate(@Param("cycleId") Long cycleId);
 }
