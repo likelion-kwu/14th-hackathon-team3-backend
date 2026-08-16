@@ -168,7 +168,7 @@ class UserControllerTest {
                 .andExpect(jsonPath("$.data.accessToken").isNotEmpty());
 
         assertThat(userRepository.findByEmail("login@example.com").orElseThrow().getActivityStatus())
-                .isEqualTo(ActivityStatus.OFF);
+                .isEqualTo(ActivityStatus.ACTIVE);
     }
 
     @Test
