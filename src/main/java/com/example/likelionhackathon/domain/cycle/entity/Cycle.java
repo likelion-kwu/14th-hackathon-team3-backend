@@ -14,6 +14,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
 
 @Getter
 @Entity
@@ -72,6 +73,29 @@ public class Cycle {
 
     public boolean isCompleted() {
         return status == CycleStatus.COMPLETED;
+    }
+
+    /**
+     * 기간이 얼마나 지났는지로 보는 계획 진행률.
+     * 실제 진행률과 나란히 두면 일정보다 앞서는지 뒤처지는지 알 수 있다.
+     *
+     * <p>시작일에는 0, 마감일에는 100 이 되도록 경과일을 전체 기간으로 나눈다.
+     * 시작 전이면 0, 마감 후면 100 이다.</p>
+     *
+     * <p>하루짜리 사이클은 시작일과 마감일이 같아 두 규칙이 부딪힌다.
+     * 그날 안에 끝내야 하는 일정이므로 마감일 쪽을 따라 100 으로 본다.</p>
+     */
+    public int plannedProgressRate(LocalDate today) {
+        if (!today.isBefore(endDate)) {
+            return 100;
+        }
+        if (!today.isAfter(startDate)) {
+            return 0;
+        }
+
+        long total = ChronoUnit.DAYS.between(startDate, endDate);
+        long elapsed = ChronoUnit.DAYS.between(startDate, today);
+        return (int) (elapsed * 100 / total);
     }
 
     public boolean overlaps(LocalDate otherStart, LocalDate otherEnd) {
