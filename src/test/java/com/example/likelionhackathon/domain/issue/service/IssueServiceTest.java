@@ -14,6 +14,7 @@ import com.example.likelionhackathon.domain.issue.entity.IssueAttachment;
 import com.example.likelionhackathon.domain.issue.entity.IssueChecklistItem;
 import com.example.likelionhackathon.domain.issue.entity.IssueEnums.IssuePriority;
 import com.example.likelionhackathon.domain.issue.entity.IssueEnums.IssueStatus;
+import com.example.likelionhackathon.domain.issue.repository.IssueCommentRepository;
 import com.example.likelionhackathon.domain.issue.repository.IssueRepository;
 import com.example.likelionhackathon.domain.project.service.ProjectAccessService;
 import com.example.likelionhackathon.global.error.ErrorCode;
@@ -34,6 +35,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
@@ -55,6 +57,9 @@ class IssueServiceTest {
     private IssueRepository issueRepository;
 
     @Mock
+    private IssueCommentRepository issueCommentRepository;
+
+    @Mock
     private CycleRepository cycleRepository;
 
     @Mock
@@ -69,13 +74,16 @@ class IssueServiceTest {
     @Mock
     private ProjectAccessService projectAccessService;
 
+    @Mock
+    private FileStoragePort fileStoragePort;
+
     private IssueService issueService;
 
     @BeforeEach
     void setUp() {
         issueService = new IssueService(
-                issueRepository, cycleRepository, issueMemberPort, cycleIssuePort,
-                cycleActivityService, projectAccessService);
+                issueRepository, issueCommentRepository, cycleRepository, issueMemberPort,
+                cycleIssuePort, cycleActivityService, projectAccessService, fileStoragePort);
     }
 
     @Test
@@ -128,11 +136,52 @@ class IssueServiceTest {
     }
 
     @Test
+    void attachmentSizeComesFromStorageNotFromTheClient() {
+        when(cycleRepository.findById(CYCLE_ID)).thenReturn(Optional.of(cycle()));
+        when(issueMemberPort.isProjectMember(CYCLE_ID, ASSIGNEE_ID)).thenReturn(true);
+        when(issueRepository.save(any(Issue.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        // 저장소에는 URL 디코딩을 마친 키로 물어봐야 한다.
+        when(fileStoragePort.sizeOf("dccaa16257b34b1f9fc1787af48d7bd5_QA_결과.pdf")).thenReturn(2_516_582L);
+
+        issueService.create(new IssueRequest.Create(
+                CYCLE_ID, "제목", IssuePriority.HIGH, "설명", null, ASSIGNEE_ID,
+                LocalDate.of(2026, 8, 6),
+                List.of("http://localhost:8080/api/v1/issues/files/"
+                        + "dccaa16257b34b1f9fc1787af48d7bd5_QA_%EA%B2%B0%EA%B3%BC.pdf")));
+
+        ArgumentCaptor<Issue> captor = ArgumentCaptor.forClass(Issue.class);
+        verify(issueRepository).save(captor.capture());
+        assertThat(captor.getValue().getAttachments())
+                .extracting(IssueAttachment::getFileSize)
+                .containsExactly(2_516_582L);
+    }
+
+    @Test
+    void attachmentSizeStaysEmptyWhenStorageCannotTellIt() {
+        when(cycleRepository.findById(CYCLE_ID)).thenReturn(Optional.of(cycle()));
+        when(issueMemberPort.isProjectMember(CYCLE_ID, ASSIGNEE_ID)).thenReturn(true);
+        when(issueRepository.save(any(Issue.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(fileStoragePort.sizeOf(anyString())).thenReturn(null);
+
+        issueService.create(new IssueRequest.Create(
+                CYCLE_ID, "제목", IssuePriority.HIGH, "설명", null, ASSIGNEE_ID,
+                LocalDate.of(2026, 8, 6),
+                List.of("http://localhost:8080/api/v1/issues/files/"
+                        + "dccaa16257b34b1f9fc1787af48d7bd5_QA.pdf")));
+
+        ArgumentCaptor<Issue> captor = ArgumentCaptor.forClass(Issue.class);
+        verify(issueRepository).save(captor.capture());
+        assertThat(captor.getValue().getAttachments())
+                .extracting(IssueAttachment::getFileSize)
+                .containsOnlyNulls();
+    }
+
+    @Test
     void updateKeepsChecklistAndAttachmentsWhenOmitted() {
         Issue issue = issue();
         addChecklistItem(issue, 1L, "기존 항목", true, 0);
         issue.replaceAttachments(List.of(
-                new IssueAttachment("QA.pdf", null, "http://localhost:8080/api/v1/issues/files/abc_QA.pdf")));
+                new IssueAttachment("QA.pdf", null, "http://localhost:8080/api/v1/issues/files/abc_QA.pdf", "abc_QA.pdf")));
 
         when(issueRepository.findById(ISSUE_ID)).thenReturn(Optional.of(issue));
         when(cycleRepository.findById(CYCLE_ID)).thenReturn(Optional.of(cycle()));
@@ -154,7 +203,7 @@ class IssueServiceTest {
         Issue issue = issue();
         addChecklistItem(issue, 1L, "기존 항목", true, 0);
         issue.replaceAttachments(List.of(
-                new IssueAttachment("QA.pdf", null, "http://localhost:8080/api/v1/issues/files/abc_QA.pdf")));
+                new IssueAttachment("QA.pdf", null, "http://localhost:8080/api/v1/issues/files/abc_QA.pdf", "abc_QA.pdf")));
 
         when(issueRepository.findById(ISSUE_ID)).thenReturn(Optional.of(issue));
         when(cycleRepository.findById(CYCLE_ID)).thenReturn(Optional.of(cycle()));
@@ -215,7 +264,7 @@ class IssueServiceTest {
         when(cycleRepository.findById(CYCLE_ID)).thenReturn(Optional.of(cycle()));
         when(issueMemberPort.findCurrentMember(CYCLE_ID))
                 .thenReturn(Optional.of(new IssueMemberPort.MemberProfile(5L, "김민준", null, null, null)));
-        when(cycleIssuePort.statsOf(CYCLE_ID)).thenReturn(new IssueStats(2, 1, 1, 0, 0));
+        when(cycleIssuePort.statsOf(CYCLE_ID)).thenReturn(new IssueStats(2, 1, 1, 0, 0, 0));
 
         issueService.changeStatus(ISSUE_ID, new IssueRequest.ChangeStatus(IssueStatus.DONE, "마케팅팀 최종 승인 완료"));
 
@@ -236,7 +285,7 @@ class IssueServiceTest {
 
         when(issueRepository.findById(ISSUE_ID)).thenReturn(Optional.of(issue));
         when(cycleRepository.findById(CYCLE_ID)).thenReturn(Optional.of(cycle()));
-        when(cycleIssuePort.statsOf(CYCLE_ID)).thenReturn(new IssueStats(1, 1, 0, 0, 0));
+        when(cycleIssuePort.statsOf(CYCLE_ID)).thenReturn(new IssueStats(1, 1, 0, 0, 0, 0));
 
         issueService.changeStatus(ISSUE_ID, new IssueRequest.ChangeStatus(IssueStatus.DONE, null));
 
@@ -278,7 +327,8 @@ class IssueServiceTest {
     void updateRecordsFileUploadedOnlyForNewlyAddedAttachments() {
         Issue issue = issue();
         issue.replaceAttachments(List.of(new IssueAttachment(
-                "QA.pdf", null, "http://localhost:8080/api/v1/issues/files/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_QA.pdf")));
+                "QA.pdf", null, "http://localhost:8080/api/v1/issues/files/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_QA.pdf",
+                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_QA.pdf")));
 
         when(issueRepository.findById(ISSUE_ID)).thenReturn(Optional.of(issue));
         when(cycleRepository.findById(CYCLE_ID)).thenReturn(Optional.of(cycle()));
@@ -295,6 +345,23 @@ class IssueServiceTest {
         ArgumentCaptor<CycleActivity> captor = ArgumentCaptor.forClass(CycleActivity.class);
         verify(cycleActivityService, times(1)).record(captor.capture());
         assertThat(captor.getValue().getFileName()).isEqualTo("New.pdf");
+    }
+
+    @Test
+    void createRejectsAttachmentUrlWithBrokenPercentEscape() {
+        when(cycleRepository.findById(CYCLE_ID)).thenReturn(Optional.of(cycle()));
+        when(issueMemberPort.isProjectMember(CYCLE_ID, ASSIGNEE_ID)).thenReturn(true);
+
+        IssueRequest.Create request = new IssueRequest.Create(
+                CYCLE_ID, "제목", IssuePriority.HIGH, "설명", null, ASSIGNEE_ID,
+                LocalDate.of(2026, 8, 6),
+                List.of("http://localhost:8080/api/v1/issues/files/abc%ZZ.pdf"));
+
+        assertThatThrownBy(() -> issueService.create(request))
+                .isInstanceOf(CustomException.class)
+                .hasMessage("첨부파일 URL이 올바르지 않습니다.")
+                .extracting(e -> ((CustomException) e).getErrorCode())
+                .isEqualTo(ErrorCode.ISSUE_INVALID_INPUT);
     }
 
     @Test
@@ -458,7 +525,7 @@ class IssueServiceTest {
         when(issueRepository.findById(ISSUE_ID)).thenReturn(Optional.of(issue));
         when(cycleRepository.findById(CYCLE_ID)).thenReturn(Optional.of(cycle()));
         lenient().when(issueMemberPort.findProfile(anyLong())).thenReturn(Optional.empty());
-        when(cycleIssuePort.statsOf(CYCLE_ID)).thenReturn(new IssueStats(11, 9, 2, 0, 0));
+        when(cycleIssuePort.statsOf(CYCLE_ID)).thenReturn(new IssueStats(11, 9, 2, 0, 0, 0));
 
         IssueResponse.StatusChanged response = issueService.changeStatus(
                 ISSUE_ID, new IssueRequest.ChangeStatus(IssueStatus.DONE, "마케팅팀 최종 승인 완료"));

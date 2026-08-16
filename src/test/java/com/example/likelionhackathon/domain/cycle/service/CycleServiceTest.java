@@ -196,7 +196,7 @@ class CycleServiceTest {
         Cycle next = cycle(4L, LocalDate.now().plusDays(5), LocalDate.now().plusDays(19));
 
         when(cycleRepository.findById(CYCLE_ID)).thenReturn(Optional.of(cycle));
-        when(cycleIssuePort.statsOf(CYCLE_ID)).thenReturn(new IssueStats(23, 19, 5, 3, 1));
+        when(cycleIssuePort.statsOf(CYCLE_ID)).thenReturn(new IssueStats(23, 19, 5, 3, 1, 0));
         when(cycleRepository.findFirstByProjectIdAndStartDateGreaterThanOrderByStartDateAsc(
                 PROJECT_ID, cycle.getStartDate())).thenReturn(Optional.of(next));
         when(cycleAiAnalysisRepository.findFirstByCycleIdAndStatusOrderByAnalyzedAtDesc(
@@ -307,7 +307,7 @@ class CycleServiceTest {
     void getCyclesMapsProgressRateFromIssueStats() {
         Cycle cycle = cycle(CYCLE_ID, LocalDate.of(2026, 7, 29), LocalDate.of(2026, 8, 12));
         when(cycleRepository.findByProjectIdOrderByStartDateAsc(PROJECT_ID)).thenReturn(List.of(cycle));
-        when(cycleIssuePort.statsOf(anyLong())).thenReturn(new IssueStats(4, 3, 1, 0, 0));
+        when(cycleIssuePort.statsOf(anyLong())).thenReturn(new IssueStats(4, 3, 1, 0, 0, 0));
 
         List<CycleResponse.Summary> summaries = cycleService.getCycles(PROJECT_ID, null);
 

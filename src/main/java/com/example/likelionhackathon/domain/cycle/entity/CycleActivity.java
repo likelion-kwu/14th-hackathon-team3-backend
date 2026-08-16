@@ -116,7 +116,8 @@ public class CycleActivity {
             LocalDateTime occurredAt,
             String actorName,
             Long issueId,
-            String issueTitle
+            String issueTitle,
+            String content
     ) {
         CycleActivity activity = new CycleActivity(
                 cycleId, ActivityType.COMMENT_ADDED, occurredAt, actorName,
@@ -124,6 +125,8 @@ public class CycleActivity {
         );
         activity.issueId = issueId;
         activity.issueTitle = issueTitle;
+        // 활동 기록 화면이 댓글 본문을 인용해 보여준다. 상태 변경의 사유 칸을 같은 자리로 쓴다.
+        activity.reason = content;
         return activity;
     }
 

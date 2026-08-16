@@ -26,6 +26,10 @@ public class JpaCycleIssuePort implements CycleIssuePort {
     private static final List<IssueStatus> UNFINISHED_EXCLUDED =
             List.of(IssueStatus.DONE, IssueStatus.CANCELED);
 
+    /** 완료된 이슈는 이미 1 로 세고, 취소된 이슈는 분모에서 빠져 부분 진행을 볼 필요가 없다. */
+    private static final List<IssueStatus> PROGRESS_EXCLUDED =
+            List.of(IssueStatus.DONE, IssueStatus.CANCELED);
+
     private final IssueRepository issueRepository;
 
     @Override
@@ -42,13 +46,40 @@ public class JpaCycleIssuePort implements CycleIssuePort {
                 countOf(counts, IssueStatus.DONE),
                 countOf(counts, IssueStatus.IN_PROGRESS),
                 countOf(counts, IssueStatus.NEEDS_REVIEW),
-                canceledCount
+                canceledCount,
+                partialProgressOf(cycleId)
         );
+    }
+
+    /**
+     * 완료되지 않은 이슈들이 완료 조건을 채운 비율의 합.
+     * 완료 조건이 없는 이슈는 조회 결과에 없어 0 으로 잡힌다.
+     */
+    private double partialProgressOf(Long cycleId) {
+        return issueRepository.checklistProgressOfUnfinished(cycleId, PROGRESS_EXCLUDED).stream()
+                .filter(row -> row.getTotalCount() > 0)
+                .mapToDouble(row -> (double) row.getDoneCount() / row.getTotalCount())
+                .sum();
     }
 
     @Override
     public boolean hasAnyIssue(Long cycleId) {
         return issueRepository.existsByCycleId(cycleId);
+    }
+
+    @Override
+    public List<IssueBrief> briefsOf(Long cycleId) {
+        return issueRepository.findByCycleIdOrderByDueDateAscIdAsc(cycleId).stream()
+                .map(issue -> new IssueBrief(
+                        issue.getId(),
+                        issue.getTitle(),
+                        issue.getStatus().name(),
+                        issue.getPriority().name(),
+                        issue.getDueDate(),
+                        issue.checklistDoneCount(),
+                        issue.checklistTotalCount()
+                ))
+                .toList();
     }
 
     @Override

@@ -43,7 +43,12 @@ public class CycleAiAnalysisService {
 
     @Transactional
     public CycleResponse.AnalysisJob runAnalysis(Long cycleId, CycleRequest.RunAnalysis request) {
-        requireCycleAccess(cycleId);
+        // 사이클을 잠근 뒤에 검사해야 한다. 잠그지 않으면 동시에 들어온 요청이
+        // 서로의 PENDING 이 커밋되기 전에 아래 검사를 읽어 전부 통과한다.
+        Cycle cycle = cycleRepository.findByIdForUpdate(cycleId)
+                .orElseThrow(() -> new CustomException(ErrorCode.CYCLE_NOT_FOUND));
+        projectAccessService.findProject(cycle.getProjectId());
+        projectAccessService.requireAccess(cycle.getProjectId());
 
         boolean forced = request != null && request.isForced();
         if (!forced && cycleAiAnalysisRepository.existsByCycleIdAndStatusIn(cycleId, RUNNING_STATUSES)) {

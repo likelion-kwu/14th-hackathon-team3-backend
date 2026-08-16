@@ -8,7 +8,7 @@ import java.util.List;
 public interface IssueAttachmentRepository extends JpaRepository<IssueAttachment, Long> {
 
     /**
-     * 저장 파일명으로 첨부를 찾는다. 다운로드 권한을 확인할 때 쓴다.
+     * 저장 키로 첨부를 찾는다. 다운로드 권한을 확인할 때 쓴다.
      */
-    List<IssueAttachment> findByFileUrlEndingWith(String storedNameSuffix);
+    List<IssueAttachment> findByStoredKey(String storedKey);
 }
