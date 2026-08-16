@@ -59,6 +59,7 @@ public class IssueService {
     private final CycleIssuePort cycleIssuePort;
     private final CycleActivityService cycleActivityService;
     private final ProjectAccessService projectAccessService;
+    private final FileStoragePort fileStoragePort;
 
     public List<IssueResponse.Summary> getIssues(
             Long cycleId,
@@ -308,7 +309,9 @@ public class IssueService {
                 throw new CustomException(ErrorCode.ISSUE_INVALID_INPUT, "첨부파일 URL이 올바르지 않습니다.");
             }
             String storedKey = extractStoredKey(fileUrl);
-            attachments.add(new IssueAttachment(toOriginalName(storedKey), null, fileUrl, storedKey));
+            // 클라이언트는 URL 만 보낸다. 크기는 저장소에 직접 물어봐야 정확하다.
+            attachments.add(new IssueAttachment(
+                    toOriginalName(storedKey), fileStoragePort.sizeOf(storedKey), fileUrl, storedKey));
         }
         return attachments;
     }

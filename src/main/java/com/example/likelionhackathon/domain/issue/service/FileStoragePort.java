@@ -21,6 +21,16 @@ public interface FileStoragePort {
      */
     Resource load(String storedKey);
 
+    /**
+     * 저장된 파일의 크기. 내용은 읽지 않고 메타데이터만 본다.
+     *
+     * <p>이슈에 첨부를 붙일 때 클라이언트는 URL 만 보낸다.
+     * 크기를 함께 받아 그대로 믿는 대신 저장소에 직접 물어본다.</p>
+     *
+     * @return 크기(byte). 파일을 찾을 수 없으면 {@code null}
+     */
+    Long sizeOf(String storedKey);
+
     record StoredFile(String fileName, Long fileSize, String fileUrl, String storedKey) {
     }
 }

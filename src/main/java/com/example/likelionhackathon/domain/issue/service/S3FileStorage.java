@@ -14,6 +14,7 @@ import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
+import software.amazon.awssdk.services.s3.model.HeadObjectRequest;
 import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.model.S3Exception;
@@ -104,6 +105,21 @@ public class S3FileStorage implements FileStoragePort {
         } catch (S3Exception e) {
             log.error("S3 다운로드에 실패했습니다. bucket={}, key={}", bucket, storedKey, e);
             throw new CustomException(ErrorCode.INTERNAL_SERVER_ERROR, "파일을 가져오지 못했습니다.");
+        }
+    }
+
+    @Override
+    public Long sizeOf(String storedKey) {
+        try {
+            // HeadObject 는 본문을 받지 않고 메타데이터만 가져온다.
+            return s3Client.headObject(
+                    HeadObjectRequest.builder().bucket(bucket).key(KEY_PREFIX + storedKey).build())
+                    .contentLength();
+        } catch (NoSuchKeyException e) {
+            return null;
+        } catch (S3Exception e) {
+            log.warn("S3 파일 크기를 읽지 못했습니다. bucket={}, key={}", bucket, storedKey, e);
+            return null;
         }
     }
 

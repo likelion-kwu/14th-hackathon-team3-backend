@@ -93,4 +93,19 @@ public class LocalFileStorage implements FileStoragePort {
 
         return new FileSystemResource(target);
     }
+
+    @Override
+    public Long sizeOf(String storedName) {
+        Path target = uploadDirectory.resolve(storedName).normalize();
+        if (!target.startsWith(uploadDirectory) || !Files.isReadable(target)) {
+            return null;
+        }
+
+        try {
+            return Files.size(target);
+        } catch (IOException e) {
+            log.warn("첨부파일 크기를 읽지 못했습니다. file={}", storedName, e);
+            return null;
+        }
+    }
 }
