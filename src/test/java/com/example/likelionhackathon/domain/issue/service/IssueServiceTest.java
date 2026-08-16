@@ -35,6 +35,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
@@ -73,13 +74,16 @@ class IssueServiceTest {
     @Mock
     private ProjectAccessService projectAccessService;
 
+    @Mock
+    private FileStoragePort fileStoragePort;
+
     private IssueService issueService;
 
     @BeforeEach
     void setUp() {
         issueService = new IssueService(
                 issueRepository, issueCommentRepository, cycleRepository, issueMemberPort,
-                cycleIssuePort, cycleActivityService, projectAccessService);
+                cycleIssuePort, cycleActivityService, projectAccessService, fileStoragePort);
     }
 
     @Test
@@ -129,6 +133,47 @@ class IssueServiceTest {
         assertThat(captor.getValue().getAttachments())
                 .extracting(IssueAttachment::getFileName)
                 .containsExactly("QA_결과.pdf");
+    }
+
+    @Test
+    void attachmentSizeComesFromStorageNotFromTheClient() {
+        when(cycleRepository.findById(CYCLE_ID)).thenReturn(Optional.of(cycle()));
+        when(issueMemberPort.isProjectMember(CYCLE_ID, ASSIGNEE_ID)).thenReturn(true);
+        when(issueRepository.save(any(Issue.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        // 저장소에는 URL 디코딩을 마친 키로 물어봐야 한다.
+        when(fileStoragePort.sizeOf("dccaa16257b34b1f9fc1787af48d7bd5_QA_결과.pdf")).thenReturn(2_516_582L);
+
+        issueService.create(new IssueRequest.Create(
+                CYCLE_ID, "제목", IssuePriority.HIGH, "설명", null, ASSIGNEE_ID,
+                LocalDate.of(2026, 8, 6),
+                List.of("http://localhost:8080/api/v1/issues/files/"
+                        + "dccaa16257b34b1f9fc1787af48d7bd5_QA_%EA%B2%B0%EA%B3%BC.pdf")));
+
+        ArgumentCaptor<Issue> captor = ArgumentCaptor.forClass(Issue.class);
+        verify(issueRepository).save(captor.capture());
+        assertThat(captor.getValue().getAttachments())
+                .extracting(IssueAttachment::getFileSize)
+                .containsExactly(2_516_582L);
+    }
+
+    @Test
+    void attachmentSizeStaysEmptyWhenStorageCannotTellIt() {
+        when(cycleRepository.findById(CYCLE_ID)).thenReturn(Optional.of(cycle()));
+        when(issueMemberPort.isProjectMember(CYCLE_ID, ASSIGNEE_ID)).thenReturn(true);
+        when(issueRepository.save(any(Issue.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(fileStoragePort.sizeOf(anyString())).thenReturn(null);
+
+        issueService.create(new IssueRequest.Create(
+                CYCLE_ID, "제목", IssuePriority.HIGH, "설명", null, ASSIGNEE_ID,
+                LocalDate.of(2026, 8, 6),
+                List.of("http://localhost:8080/api/v1/issues/files/"
+                        + "dccaa16257b34b1f9fc1787af48d7bd5_QA.pdf")));
+
+        ArgumentCaptor<Issue> captor = ArgumentCaptor.forClass(Issue.class);
+        verify(issueRepository).save(captor.capture());
+        assertThat(captor.getValue().getAttachments())
+                .extracting(IssueAttachment::getFileSize)
+                .containsOnlyNulls();
     }
 
     @Test

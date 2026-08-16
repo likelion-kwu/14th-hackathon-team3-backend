@@ -22,6 +22,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.LocalDate;
@@ -85,7 +86,7 @@ class IssueCommentServiceTest {
                 .extracting(e -> ((CustomException) e).getErrorCode())
                 .isEqualTo(ErrorCode.PROJECT_ACCESS_DENIED);
 
-        verify(issueCommentRepository, never()).save(any());
+        verify(issueCommentRepository, never()).saveAndFlush(any());
     }
 
     @Test
@@ -137,7 +138,7 @@ class IssueCommentServiceTest {
         when(issueRepository.findById(ISSUE_ID)).thenReturn(Optional.of(issue()));
         when(cycleRepository.findById(CYCLE_ID)).thenReturn(Optional.of(cycle()));
         when(issueMemberPort.findCurrentMember(CYCLE_ID)).thenReturn(Optional.of(member(AUTHOR_ID, "김호균")));
-        when(issueCommentRepository.save(any())).thenAnswer(call -> call.getArgument(0));
+        when(issueCommentRepository.saveAndFlush(any())).thenAnswer(call -> call.getArgument(0));
 
         issueCommentService.write(ISSUE_ID, new IssueCommentRequest.Write("내가 전달 받은 뒤 다시 공유해줄래?"));
 
@@ -162,7 +163,7 @@ class IssueCommentServiceTest {
                 .extracting(e -> ((CustomException) e).getErrorCode())
                 .isEqualTo(ErrorCode.COMMENT_INVALID_INPUT);
 
-        verify(issueCommentRepository, never()).save(any());
+        verify(issueCommentRepository, never()).saveAndFlush(any());
     }
 
     @Test
@@ -172,7 +173,7 @@ class IssueCommentServiceTest {
         when(issueRepository.findById(ISSUE_ID)).thenReturn(Optional.of(issue()));
         when(cycleRepository.findById(CYCLE_ID)).thenReturn(Optional.of(cycle()));
         when(issueMemberPort.findCurrentMember(CYCLE_ID)).thenReturn(Optional.of(member(AUTHOR_ID, "김호균")));
-        when(issueCommentRepository.save(any())).thenAnswer(call -> call.getArgument(0));
+        when(issueCommentRepository.saveAndFlush(any())).thenAnswer(call -> call.getArgument(0));
 
         issueCommentService.write(ISSUE_ID, new IssueCommentRequest.Write(longContent));
 
@@ -219,6 +220,23 @@ class IssueCommentServiceTest {
     }
 
     @Test
+    void writeReportsDeletedIssueInsteadOfLeavingAnOrphan() {
+        when(issueRepository.findById(ISSUE_ID)).thenReturn(Optional.of(issue()));
+        when(cycleRepository.findById(CYCLE_ID)).thenReturn(Optional.of(cycle()));
+        when(issueMemberPort.findCurrentMember(CYCLE_ID)).thenReturn(Optional.of(member(AUTHOR_ID, "김호균")));
+        // 이슈를 확인한 뒤 저장하기까지 사이에 이슈가 지워지면 외래키가 막는다.
+        when(issueCommentRepository.saveAndFlush(any()))
+                .thenThrow(new DataIntegrityViolationException("FK 위반"));
+
+        assertThatThrownBy(() -> issueCommentService.write(ISSUE_ID, new IssueCommentRequest.Write("안녕")))
+                .isInstanceOf(CustomException.class)
+                .extracting(e -> ((CustomException) e).getErrorCode())
+                .isEqualTo(ErrorCode.ISSUE_NOT_FOUND);
+
+        verify(cycleActivityService, never()).record(any());
+    }
+
+    @Test
     void getCommentsMarksOnlyOwnCommentsEditable() {
         when(issueRepository.findById(ISSUE_ID)).thenReturn(Optional.of(issue()));
         when(cycleRepository.findById(CYCLE_ID)).thenReturn(Optional.of(cycle()));
@@ -252,7 +270,7 @@ class IssueCommentServiceTest {
     }
 
     private IssueComment comment(String content, Long authorId) {
-        IssueComment comment = IssueComment.write(ISSUE_ID, authorId, content);
+        IssueComment comment = IssueComment.write(issue(), authorId, content);
         ReflectionTestUtils.setField(comment, "id", COMMENT_ID);
         return comment;
     }
