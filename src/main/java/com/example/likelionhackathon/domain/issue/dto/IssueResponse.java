@@ -25,9 +25,10 @@ public final class IssueResponse {
             LocalDate dueDate,
             int checklistDoneCount,
             int checklistTotalCount,
-            int attachmentCount
+            int attachmentCount,
+            long commentCount
     ) {
-        public static Summary of(Issue issue, String assigneeName) {
+        public static Summary of(Issue issue, String assigneeName, long commentCount) {
             return new Summary(
                     issue.getId(),
                     issue.getTitle(),
@@ -37,7 +38,8 @@ public final class IssueResponse {
                     issue.getDueDate(),
                     issue.checklistDoneCount(),
                     issue.checklistTotalCount(),
-                    issue.getAttachments().size()
+                    issue.getAttachments().size(),
+                    commentCount
             );
         }
     }

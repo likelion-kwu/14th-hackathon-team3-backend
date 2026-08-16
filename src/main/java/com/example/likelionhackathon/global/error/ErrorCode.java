@@ -92,7 +92,11 @@ public enum ErrorCode {
     ISSUE_INVALID_INPUT(HttpStatus.BAD_REQUEST, "400ISSUE", "이슈 입력값이 올바르지 않습니다."),
     ISSUE_NOT_FOUND(HttpStatus.NOT_FOUND, "404ISSUE", "존재하지 않는 이슈입니다."),
     ISSUE_CONFLICT(HttpStatus.CONFLICT, "409ISSUE", "요청을 처리할 수 없는 이슈 상태입니다."),
-    ISSUE_FILE_TOO_LARGE(HttpStatus.CONTENT_TOO_LARGE, "413ISSUE", "파일 용량이 초과되었습니다.");
+    ISSUE_FILE_TOO_LARGE(HttpStatus.CONTENT_TOO_LARGE, "413ISSUE", "파일 용량이 초과되었습니다."),
+
+    COMMENT_INVALID_INPUT(HttpStatus.BAD_REQUEST, "400COMMENT", "댓글 입력값이 올바르지 않습니다."),
+    COMMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "404COMMENT", "존재하지 않는 댓글입니다."),
+    COMMENT_FORBIDDEN(HttpStatus.FORBIDDEN, "403COMMENT", "본인이 작성한 댓글만 수정하거나 삭제할 수 있습니다.");
 
     private final HttpStatus httpStatus;
     private final String code;
