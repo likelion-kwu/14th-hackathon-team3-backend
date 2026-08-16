@@ -181,7 +181,7 @@ class IssueCommentServiceTest {
         verify(cycleActivityService).record(captor.capture());
 
         assertThat(captor.getValue().getReason())
-                .hasSize(IssueComment.EXCERPT_LENGTH + 1)
+                .hasSize(IssueComment.EXCERPT_LENGTH)
                 .endsWith("…");
     }
 

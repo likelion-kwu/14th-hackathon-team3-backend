@@ -15,6 +15,7 @@ import java.io.InputStream;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
@@ -97,15 +98,22 @@ public class LocalFileStorage implements FileStoragePort {
     @Override
     public Long sizeOf(String storedName) {
         Path target = uploadDirectory.resolve(storedName).normalize();
-        if (!target.startsWith(uploadDirectory) || !Files.isReadable(target)) {
+
+        // 경로 조작으로 업로드 디렉터리 밖을 들여다보는 것을 막는다.
+        if (!target.startsWith(uploadDirectory)) {
+            return null;
+        }
+        // 읽을 수 있는 디렉터리도 isReadable 을 통과한다. 크기를 물어볼 대상은 정규 파일뿐이다.
+        if (!Files.isRegularFile(target, LinkOption.NOFOLLOW_LINKS)) {
             return null;
         }
 
         try {
             return Files.size(target);
         } catch (IOException e) {
-            log.warn("첨부파일 크기를 읽지 못했습니다. file={}", storedName, e);
-            return null;
+            // 파일은 있는데 읽지 못한 경우다. 크기 없음으로 뭉개면 잘못된 첨부가 저장된다.
+            log.error("첨부파일 크기를 읽지 못했습니다. file={}", storedName, e);
+            throw new CustomException(ErrorCode.INTERNAL_SERVER_ERROR, "첨부파일 정보를 확인하지 못했습니다.");
         }
     }
 }

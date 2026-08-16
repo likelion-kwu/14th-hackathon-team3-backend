@@ -84,10 +84,13 @@ public class IssueComment {
 
     /**
      * 활동 기록에 인용할 짧은 본문. 긴 댓글은 잘라서 말줄임표를 붙인다.
+     *
+     * <p>말줄임표까지 합쳐 {@link #EXCERPT_LENGTH} 자를 넘지 않는다.
+     * 자른 뒤에 붙이면 한 자가 더 길어진다.</p>
      */
     public String excerpt() {
         return content.length() <= EXCERPT_LENGTH
                 ? content
-                : content.substring(0, EXCERPT_LENGTH) + "…";
+                : content.substring(0, EXCERPT_LENGTH - 1) + "…";
     }
 }

@@ -27,7 +27,12 @@ public interface FileStoragePort {
      * <p>이슈에 첨부를 붙일 때 클라이언트는 URL 만 보낸다.
      * 크기를 함께 받아 그대로 믿는 대신 저장소에 직접 물어본다.</p>
      *
-     * @return 크기(byte). 파일을 찾을 수 없으면 {@code null}
+     * <p>{@code null} 은 <b>파일이 없다고 확인된 경우에만</b> 돌려준다.
+     * 권한 오류나 저장소 장애까지 {@code null} 로 뭉개면 크기를 알 수 있는 파일이
+     * 크기 없이 첨부로 저장된다.</p>
+     *
+     * @return 크기(byte). 파일이 없으면 {@code null}
+     * @throws com.example.likelionhackathon.global.error.exception.CustomException 저장소를 확인하지 못한 경우
      */
     Long sizeOf(String storedKey);
 

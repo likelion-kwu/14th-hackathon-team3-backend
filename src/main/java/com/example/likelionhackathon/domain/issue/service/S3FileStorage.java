@@ -11,6 +11,7 @@ import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 import software.amazon.awssdk.core.sync.RequestBody;
+import software.amazon.awssdk.http.HttpStatusCode;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
@@ -118,8 +119,13 @@ public class S3FileStorage implements FileStoragePort {
         } catch (NoSuchKeyException e) {
             return null;
         } catch (S3Exception e) {
-            log.warn("S3 파일 크기를 읽지 못했습니다. bucket={}, key={}", bucket, storedKey, e);
-            return null;
+            // HeadObject 는 본문이 없어 없는 키를 NoSuchKeyException 으로 주지 않고 404 로만 알리기도 한다.
+            if (e.statusCode() == HttpStatusCode.NOT_FOUND) {
+                return null;
+            }
+            // 403 처럼 파일 유무를 알 수 없는 경우다. 크기 없음으로 뭉개면 잘못된 첨부가 저장된다.
+            log.error("S3 파일 크기를 읽지 못했습니다. bucket={}, key={}", bucket, storedKey, e);
+            throw new CustomException(ErrorCode.INTERNAL_SERVER_ERROR, "첨부파일 정보를 확인하지 못했습니다.");
         }
     }
 
