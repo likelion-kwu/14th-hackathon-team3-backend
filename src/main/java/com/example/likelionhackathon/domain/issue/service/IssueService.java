@@ -12,6 +12,8 @@ import com.example.likelionhackathon.domain.issue.entity.IssueAttachment;
 import com.example.likelionhackathon.domain.issue.entity.IssueChecklistItem;
 import com.example.likelionhackathon.domain.issue.entity.IssueEnums.IssuePriority;
 import com.example.likelionhackathon.domain.issue.entity.IssueEnums.IssueStatus;
+import com.example.likelionhackathon.domain.issue.repository.IssueCommentRepository;
+import com.example.likelionhackathon.domain.issue.repository.IssueCommentRepository.CommentCount;
 import com.example.likelionhackathon.domain.issue.repository.IssueRepository;
 import com.example.likelionhackathon.domain.issue.service.IssueMemberPort.MemberProfile;
 import com.example.likelionhackathon.domain.project.service.ProjectAccessService;
@@ -34,6 +36,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.regex.Matcher;
@@ -50,11 +53,13 @@ public class IssueService {
     private static final int MAX_PAGE_SIZE = 100;
 
     private final IssueRepository issueRepository;
+    private final IssueCommentRepository issueCommentRepository;
     private final CycleRepository cycleRepository;
     private final IssueMemberPort issueMemberPort;
     private final CycleIssuePort cycleIssuePort;
     private final CycleActivityService cycleActivityService;
     private final ProjectAccessService projectAccessService;
+    private final FileStoragePort fileStoragePort;
 
     public List<IssueResponse.Summary> getIssues(
             Long cycleId,
@@ -76,9 +81,28 @@ public class IssueService {
 
         Specification<Issue> spec = buildSpecification(cycleId, statuses, parsedPriority, assigneeId, keyword);
 
-        return issueRepository.findAll(spec, pageable).getContent().stream()
-                .map(issue -> IssueResponse.Summary.of(issue, assigneeName(issue.getAssigneeId())))
+        List<Issue> issues = issueRepository.findAll(spec, pageable).getContent();
+        Map<Long, Long> commentCounts = commentCountsOf(issues);
+
+        return issues.stream()
+                .map(issue -> IssueResponse.Summary.of(
+                        issue,
+                        assigneeName(issue.getAssigneeId()),
+                        commentCounts.getOrDefault(issue.getId(), 0L)))
                 .toList();
+    }
+
+    /**
+     * 카드마다 댓글 수를 세면 목록 크기만큼 쿼리가 늘어나므로 한 번에 모아 센다.
+     */
+    private Map<Long, Long> commentCountsOf(List<Issue> issues) {
+        if (issues.isEmpty()) {
+            return Map.of();
+        }
+
+        List<Long> issueIds = issues.stream().map(Issue::getId).toList();
+        return issueCommentRepository.countGroupByIssueId(issueIds).stream()
+                .collect(Collectors.toMap(CommentCount::getIssueId, CommentCount::getCount));
     }
 
     @Transactional
@@ -245,7 +269,11 @@ public class IssueService {
 
     @Transactional
     public void delete(Long issueId) {
-        issueRepository.delete(findIssue(issueId));
+        Issue issue = findIssue(issueId);
+
+        // 댓글은 issueId 를 단순 컬럼으로 갖고 있어 함께 지우지 않으면 남는다.
+        issueCommentRepository.deleteByIssueId(issueId);
+        issueRepository.delete(issue);
     }
 
     private void replaceChecklist(Issue issue, List<IssueRequest.ChecklistItem> requested) {
@@ -281,7 +309,9 @@ public class IssueService {
                 throw new CustomException(ErrorCode.ISSUE_INVALID_INPUT, "첨부파일 URL이 올바르지 않습니다.");
             }
             String storedKey = extractStoredKey(fileUrl);
-            attachments.add(new IssueAttachment(toOriginalName(storedKey), null, fileUrl, storedKey));
+            // 클라이언트는 URL 만 보낸다. 크기는 저장소에 직접 물어봐야 정확하다.
+            attachments.add(new IssueAttachment(
+                    toOriginalName(storedKey), fileStoragePort.sizeOf(storedKey), fileUrl, storedKey));
         }
         return attachments;
     }

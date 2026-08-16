@@ -58,7 +58,7 @@ class CycleAiAnalysisServiceTest {
 
     @Test
     void rejectsRerunWhileAnalysisInProgress() {
-        when(cycleRepository.findById(CYCLE_ID)).thenReturn(Optional.of(cycle()));
+        when(cycleRepository.findByIdForUpdate(CYCLE_ID)).thenReturn(Optional.of(cycle()));
         when(cycleAiAnalysisRepository.existsByCycleIdAndStatusIn(eq(CYCLE_ID), anyList())).thenReturn(true);
 
         assertThatThrownBy(() -> cycleAiAnalysisService.runAnalysis(CYCLE_ID, new CycleRequest.RunAnalysis(false)))
@@ -73,7 +73,7 @@ class CycleAiAnalysisServiceTest {
 
     @Test
     void forceSkipsInProgressCheck() {
-        when(cycleRepository.findById(CYCLE_ID)).thenReturn(Optional.of(cycle()));
+        when(cycleRepository.findByIdForUpdate(CYCLE_ID)).thenReturn(Optional.of(cycle()));
         when(cycleAiAnalysisRepository.findFirstByCycleIdAndStatusOrderByAnalyzedAtDesc(
                 CYCLE_ID, AnalysisStatus.COMPLETED)).thenReturn(Optional.empty());
         when(cycleAiAnalysisRepository.save(any(CycleAiAnalysis.class))).thenAnswer(invocation -> {
@@ -90,6 +90,40 @@ class CycleAiAnalysisServiceTest {
         assertThat(job.estimatedSeconds()).isEqualTo(30);
         verify(cycleAiAnalysisRepository, never()).existsByCycleIdAndStatusIn(any(), anyList());
         verify(eventPublisher).publishEvent(any(CycleAnalysisRequestedEvent.class));
+    }
+
+    /**
+     * 잠그지 않고 검사하면 동시에 들어온 요청이 서로의 PENDING 을 못 보고 전부 통과한다.
+     * 실제로 동시 10건이 모두 실행돼 활동 기록에 같은 줄이 여러 번 쌓였다.
+     */
+    @Test
+    void runAnalysisReadsTheCycleWithALock() {
+        when(cycleRepository.findByIdForUpdate(CYCLE_ID)).thenReturn(Optional.of(cycle()));
+        when(cycleAiAnalysisRepository.existsByCycleIdAndStatusIn(eq(CYCLE_ID), anyList())).thenReturn(false);
+        when(cycleAiAnalysisRepository.findFirstByCycleIdAndStatusOrderByAnalyzedAtDesc(
+                CYCLE_ID, AnalysisStatus.COMPLETED)).thenReturn(Optional.empty());
+        when(cycleAiAnalysisRepository.save(any(CycleAiAnalysis.class))).thenAnswer(invocation -> {
+            CycleAiAnalysis saved = invocation.getArgument(0);
+            ReflectionTestUtils.setField(saved, "id", 91L);
+            return saved;
+        });
+
+        cycleAiAnalysisService.runAnalysis(CYCLE_ID, new CycleRequest.RunAnalysis(false));
+
+        verify(cycleRepository).findByIdForUpdate(CYCLE_ID);
+        verify(cycleRepository, never()).findById(CYCLE_ID);
+    }
+
+    @Test
+    void runAnalysisRejectsUnknownCycle() {
+        when(cycleRepository.findByIdForUpdate(CYCLE_ID)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> cycleAiAnalysisService.runAnalysis(CYCLE_ID, new CycleRequest.RunAnalysis(false)))
+                .isInstanceOf(CustomException.class)
+                .extracting(e -> ((CustomException) e).getErrorCode())
+                .isEqualTo(ErrorCode.CYCLE_NOT_FOUND);
+
+        verify(cycleAiAnalysisRepository, never()).save(any());
     }
 
     @Test
