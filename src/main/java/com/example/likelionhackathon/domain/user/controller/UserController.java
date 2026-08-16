@@ -48,4 +48,32 @@ public class UserController {
     ) {
         return ApiResponse.success("활동 상태가 변경되었습니다.", userService.updateActivityStatus(request));
     }
+
+    @Operation(summary = "기본 언어 조회")
+    @GetMapping("/me/language")
+    public ApiResponse<UserResponse.LanguageResult> getMyLanguage() {
+        return ApiResponse.success("기본 언어를 조회했습니다.", userService.getMyLanguage());
+    }
+
+    @Operation(summary = "기본 언어 변경")
+    @PatchMapping("/me/language")
+    public ApiResponse<UserResponse.LanguageResult> changeMyLanguage(
+            @Valid @RequestBody UserRequest.UpdateLanguage request
+    ) {
+        return ApiResponse.success("기본 언어가 변경되었습니다.", userService.changeMyLanguage(request));
+    }
+
+
+    @Operation(summary = "업무 지역 조회")
+    @GetMapping("/me/region")
+    public ApiResponse<UserResponse.RegionResult> getMyRegion() {
+        return ApiResponse.success("업무 지역을 조회했습니다.", userService.getMyRegion());
+    }
+
+    @Operation(summary = "업무 지역 변경")
+    @PatchMapping("/me/region")
+    public ApiResponse<UserResponse.RegionResult> changeMyRegion(
+            @Valid @RequestBody UserRequest.UpdateRegion request) {
+        return ApiResponse.success("업무 지역이 변경되었습니다.", userService.changeMyRegion(request));
+    }
 }

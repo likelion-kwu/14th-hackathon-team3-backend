@@ -66,4 +66,12 @@ public class User {
     public void changeActivityStatus(ActivityStatus activityStatus) {
         this.activityStatus = activityStatus;
     }
+
+    public void changeLanguage(String language) {
+        this.language = language;
+    }
+
+    public void changeTimezone(String timezone) {
+        this.timezone = timezone;
+    }
 }

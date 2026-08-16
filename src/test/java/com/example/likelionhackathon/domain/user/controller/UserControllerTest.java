@@ -19,6 +19,7 @@ import java.time.OffsetDateTime;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -268,6 +269,150 @@ class UserControllerTest {
                 .andExpect(jsonPath("$.code").value("404USER_NOT_FOUND"));
     }
 
+    @Test
+    void getLanguageReturnsSupportedLanguages() throws Exception {
+        User user = saveUser("language@example.com");
+
+        for (String language : List.of("ko", "en", "ja")) {
+            user.changeLanguage(language);
+            userRepository.saveAndFlush(user);
+
+            mockMvc.perform(get(languageUrl()).header("Authorization", bearer(user)))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.code").value("200OK"))
+                    .andExpect(jsonPath("$.message").value("기본 언어를 조회했습니다."))
+                    .andExpect(jsonPath("$.data.language").value(language));
+        }
+    }
+
+    @Test
+    void getLanguageAllowsNullForExistingUser() throws Exception {
+        User user = saveUser("language-null@example.com");
+
+        mockMvc.perform(get(languageUrl()).header("Authorization", bearer(user)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.language").value(nullValue()));
+    }
+
+    @Test
+    void changeLanguageSupportsKoEnAndJa() throws Exception {
+        User user = saveUser("change-language@example.com");
+
+        for (String language : List.of("ko", "en", "ja")) {
+            mockMvc.perform(patch(languageUrl())
+                            .header("Authorization", bearer(user))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"language\":\"" + language + "\"}"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.code").value("200OK"))
+                    .andExpect(jsonPath("$.message").value("기본 언어가 변경되었습니다."))
+                    .andExpect(jsonPath("$.data.language").value(language));
+
+            assertThat(userRepository.findById(user.getId()).orElseThrow().getLanguage())
+                    .isEqualTo(language);
+        }
+    }
+
+    @Test
+    void changeLanguageReplacesExistingLanguage() throws Exception {
+        User user = saveUser("replace-language@example.com");
+        user.changeLanguage("ko");
+        userRepository.saveAndFlush(user);
+
+        mockMvc.perform(patch(languageUrl())
+                        .header("Authorization", bearer(user))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"language\":\"en\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.language").value("en"));
+
+        assertThat(userRepository.findById(user.getId()).orElseThrow().getLanguage()).isEqualTo("en");
+    }
+
+    @Test
+    void changeLanguageRejectsMissingBlankAndUnsupportedValues() throws Exception {
+        User user = saveUser("invalid-language@example.com");
+
+        for (String body : List.of(
+                "{}",
+                "{\"language\":null}",
+                "{\"language\":\"\"}",
+                "{\"language\":\"   \"}",
+                "{\"language\":\"KO\"}",
+                "{\"language\":\"EN\"}",
+                "{\"language\":\"JA\"}",
+                "{\"language\":\"kr\"}",
+                "{\"language\":\"jp\"}",
+                "{\"language\":\"english\"}",
+                "{\"language\":\"unsupported\"}"
+        )) {
+            mockMvc.perform(patch(languageUrl())
+                            .header("Authorization", bearer(user))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(body))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.code").value("400INVALID_INPUT_VALUE"));
+        }
+    }
+
+    @Test
+    void languageApisRequireJwt() throws Exception {
+        mockMvc.perform(get(languageUrl()))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("401UNAUTHORIZED"));
+
+        mockMvc.perform(patch(languageUrl())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"language\":\"ko\"}"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("401UNAUTHORIZED"));
+    }
+
+    @Test
+    void languageApisReturnUserNotFoundForMissingJwtUser() throws Exception {
+        String authorization = "Bearer " + jwtTokenProvider.createAccessToken(Long.MAX_VALUE);
+
+        mockMvc.perform(get(languageUrl()).header("Authorization", authorization))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("404USER_NOT_FOUND"));
+
+        mockMvc.perform(patch(languageUrl())
+                        .header("Authorization", authorization)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"language\":\"ko\"}"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("404USER_NOT_FOUND"));
+    }
+
+    @Test
+    void regionApisStoreIanaTimezoneAndReturnRegion() throws Exception {
+        User user = saveUser("region@example.com");
+        String[][] cases = {{"SEOUL", "Asia/Seoul"}, {"TOKYO", "Asia/Tokyo"},
+                {"NEW_YORK", "America/New_York"}, {"LOS_ANGELES", "America/Los_Angeles"}};
+        for (String[] value : cases) {
+            mockMvc.perform(patch(regionUrl()).header("Authorization", bearer(user))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"region\":\"" + value[0] + "\"}"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.region").value(value[0]))
+                    .andExpect(jsonPath("$.data.timezone").value(value[1]));
+            assertThat(userRepository.findById(user.getId()).orElseThrow().getTimezone()).isEqualTo(value[1]);
+        }
+    }
+
+    @Test
+    void getRegionSafelyReturnsUnsetAndPatchRejectsUnsupportedValue() throws Exception {
+        User user = saveUser("region-unset@example.com");
+        mockMvc.perform(get(regionUrl()).header("Authorization", bearer(user)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.region").value(nullValue()))
+                .andExpect(jsonPath("$.data.timezone").value(nullValue()));
+        mockMvc.perform(patch(regionUrl()).header("Authorization", bearer(user))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"region\":\"LONDON\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("400INVALID_INPUT_VALUE"));
+    }
+
     private void saveVerifiedEmail(String email) {
         EmailVerification verification = EmailVerification.create(email,
                 passwordEncoder.encode("123456"), OffsetDateTime.now().plusMinutes(5),
@@ -293,4 +438,10 @@ class UserControllerTest {
     private String activityStatusUrl() {
         return "/api/v1/users/me/activity-status";
     }
+
+    private String languageUrl() {
+        return "/api/v1/users/me/language";
+    }
+
+    private String regionUrl() { return "/api/v1/users/me/region"; }
 }
