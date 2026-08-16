@@ -14,6 +14,7 @@ import com.example.likelionhackathon.domain.issue.entity.IssueAttachment;
 import com.example.likelionhackathon.domain.issue.entity.IssueChecklistItem;
 import com.example.likelionhackathon.domain.issue.entity.IssueEnums.IssuePriority;
 import com.example.likelionhackathon.domain.issue.entity.IssueEnums.IssueStatus;
+import com.example.likelionhackathon.domain.issue.repository.IssueCommentRepository;
 import com.example.likelionhackathon.domain.issue.repository.IssueRepository;
 import com.example.likelionhackathon.domain.project.service.ProjectAccessService;
 import com.example.likelionhackathon.global.error.ErrorCode;
@@ -55,6 +56,9 @@ class IssueServiceTest {
     private IssueRepository issueRepository;
 
     @Mock
+    private IssueCommentRepository issueCommentRepository;
+
+    @Mock
     private CycleRepository cycleRepository;
 
     @Mock
@@ -74,8 +78,8 @@ class IssueServiceTest {
     @BeforeEach
     void setUp() {
         issueService = new IssueService(
-                issueRepository, cycleRepository, issueMemberPort, cycleIssuePort,
-                cycleActivityService, projectAccessService);
+                issueRepository, issueCommentRepository, cycleRepository, issueMemberPort,
+                cycleIssuePort, cycleActivityService, projectAccessService);
     }
 
     @Test
