@@ -15,6 +15,7 @@ import com.example.likelionhackathon.domain.project.service.ProjectAccessService
 import com.example.likelionhackathon.global.error.ErrorCode;
 import com.example.likelionhackathon.global.error.exception.CustomException;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -58,8 +59,8 @@ public class IssueCommentService {
         String content = validateContent(request.content());
 
         MemberProfile author = requireCurrentMember(issue.getCycleId());
-        IssueComment saved = issueCommentRepository.save(
-                IssueComment.write(issueId, author.userId(), content));
+        IssueComment saved = saveDetectingDeletedIssue(
+                IssueComment.write(issue, author.userId(), content));
 
         cycleActivityService.record(CycleActivity.commentAdded(
                 issue.getCycleId(),
@@ -92,6 +93,18 @@ public class IssueCommentService {
         requireAuthor(comment, issue.getCycleId());
 
         issueCommentRepository.delete(comment);
+    }
+
+    /**
+     * 이슈를 확인한 뒤 저장하기까지 사이에 그 이슈가 지워질 수 있다.
+     * 외래키가 막아주므로 고아 댓글은 생기지 않고, 그 상황을 404 로 알린다.
+     */
+    private IssueComment saveDetectingDeletedIssue(IssueComment comment) {
+        try {
+            return issueCommentRepository.saveAndFlush(comment);
+        } catch (DataIntegrityViolationException e) {
+            throw new CustomException(ErrorCode.ISSUE_NOT_FOUND, "이슈가 삭제되어 댓글을 남길 수 없습니다.");
+        }
     }
 
     /**

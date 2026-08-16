@@ -2,9 +2,12 @@ package com.example.likelionhackathon.domain.issue.entity;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -29,8 +32,13 @@ public class IssueComment {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false)
-    private Long issueId;
+    /**
+     * 소속 이슈. 식별자만 들고 있으면 이슈가 지워지는 사이에 들어온 댓글이 살아남아 고아가 된다.
+     * 첨부파일과 마찬가지로 외래키를 걸어 DB 가 막도록 한다.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "issue_id", nullable = false)
+    private Issue issue;
 
     /** 작성자. 회원이 아니라 프로젝트 멤버 식별자다. */
     @Column(nullable = false)
@@ -49,12 +57,16 @@ public class IssueComment {
      */
     private LocalDateTime updatedAt;
 
-    public static IssueComment write(Long issueId, Long authorId, String content) {
+    public static IssueComment write(Issue issue, Long authorId, String content) {
         IssueComment comment = new IssueComment();
-        comment.issueId = issueId;
+        comment.issue = issue;
         comment.authorId = authorId;
         comment.content = content;
         return comment;
+    }
+
+    public Long getIssueId() {
+        return issue.getId();
     }
 
     public void edit(String content) {
