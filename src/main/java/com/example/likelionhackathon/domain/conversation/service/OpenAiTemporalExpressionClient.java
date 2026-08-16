@@ -85,7 +85,7 @@ public class OpenAiTemporalExpressionClient {
 
     private Map<String, Object> schemaFormat() {
         Map<String, Object> expressionProperties = new LinkedHashMap<>();
-        expressionProperties.put("originalText", Map.of("type", "string", "minLength", 1));
+        expressionProperties.put("originalText", Map.of("type", "string"));
         expressionProperties.put("type", enumSchema("RELATIVE_DATE", "RELATIVE_DATE_TIME", "WEEKDAY", "EXPLICIT_DATE", "EXPLICIT_DATE_TIME"));
         expressionProperties.put("relativeDateType", enumSchema("TODAY", "TOMORROW", "DAY_AFTER_TOMORROW", "NEXT_WEEK", "NEXT_DAY_OF_WEEK", "NONE"));
         expressionProperties.put("dayOfWeek", nullableString());
