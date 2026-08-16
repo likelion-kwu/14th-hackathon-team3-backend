@@ -397,6 +397,10 @@ class UserControllerTest {
                     .andExpect(jsonPath("$.data.region").value(value[0]))
                     .andExpect(jsonPath("$.data.timezone").value(value[1]));
             assertThat(userRepository.findById(user.getId()).orElseThrow().getTimezone()).isEqualTo(value[1]);
+            mockMvc.perform(get(regionUrl()).header("Authorization", bearer(user)))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.region").value(value[0]))
+                    .andExpect(jsonPath("$.data.timezone").value(value[1]));
         }
     }
 

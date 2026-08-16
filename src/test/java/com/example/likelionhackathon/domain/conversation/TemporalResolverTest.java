@@ -43,6 +43,28 @@ class TemporalResolverTest {
         assertThat(resolved.senderDateTime().getOffset()).isEqualTo(ZoneOffset.ofHours(-4));
     }
 
+    @Test void resolvesNextWeekWeekdaysWithinMondayToSundayWeek() {
+        TemporalResolver wednesdayResolver = new TemporalResolver(
+                Clock.fixed(Instant.parse("2026-08-19T03:00:00Z"), ZoneOffset.UTC));
+        assertThat(resolveNextWeek(wednesdayResolver, "FRIDAY")).isEqualTo(LocalDate.of(2026, 8, 28));
+        assertThat(resolveNextWeek(wednesdayResolver, "MONDAY")).isEqualTo(LocalDate.of(2026, 8, 24));
+        assertThat(resolveNextWeek(wednesdayResolver, "SUNDAY")).isEqualTo(LocalDate.of(2026, 8, 30));
+    }
+
+    @Test void resolvesExplicitDateWithoutChangingIt() {
+        TemporalExpression expression = new TemporalExpression("2026-08-20", Type.EXPLICIT_DATE,
+                RelativeDateType.NONE, null, "2026-08-20", null, false, Role.EVENT_TIME);
+        assertThat(resolve(expression, "Asia/Seoul", "America/Los_Angeles").senderDate())
+                .isEqualTo(LocalDate.of(2026, 8, 20));
+    }
+
+    private LocalDate resolveNextWeek(TemporalResolver target, String dayOfWeek) {
+        TemporalExpression expression = new TemporalExpression("다음 주", Type.WEEKDAY,
+                RelativeDateType.NEXT_WEEK, dayOfWeek, null, null, false, Role.EVENT_TIME);
+        return target.resolve(List.of(expression), ZoneId.of("Asia/Seoul"), ZoneId.of("Asia/Seoul"))
+                .expressions().getFirst().senderDate();
+    }
+
     private ResolvedTemporalExpression resolve(TemporalExpression expression, String sender, String receiver) {
         return resolver.resolve(List.of(expression), ZoneId.of(sender), ZoneId.of(receiver)).expressions().getFirst();
     }

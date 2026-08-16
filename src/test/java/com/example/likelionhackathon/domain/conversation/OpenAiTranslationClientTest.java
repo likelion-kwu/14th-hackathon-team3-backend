@@ -71,6 +71,12 @@ class OpenAiTranslationClientTest {
         oversized.server().expect(once(), requestTo("https://api.openai.com/v1/responses"))
                 .andRespond(withSuccess(response("a".repeat(4001), "설명"), MediaType.APPLICATION_JSON));
         assertError(oversized.client(), ErrorCode.AI_TRANSLATION_FAILED);
+
+        TestClient atLimit = client();
+        atLimit.server().expect(once(), requestTo("https://api.openai.com/v1/responses"))
+                .andRespond(withSuccess(response("a".repeat(4000), "설명"), MediaType.APPLICATION_JSON));
+        assertThat(atLimit.client().translate("검토해주세요.", "ko", "en").translatedContent())
+                .hasSize(4000);
     }
 
     @Test
@@ -87,7 +93,19 @@ class OpenAiTranslationClientTest {
         OpenAiProperties properties = properties("");
         OpenAiTranslationClient client = new OpenAiTranslationClient(
                 builder.build(), properties, new ObjectMapper());
-        assertError(client, ErrorCode.AI_TRANSLATION_FAILED);
+        assertThatThrownBy(() -> client.translate("검토해주세요.", "ko", "en"))
+                .isInstanceOf(CustomException.class)
+                .hasMessage("OpenAI API 키가 설정되지 않았습니다.")
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.AI_TRANSLATION_FAILED);
+    }
+
+    @Test
+    void rejectsNullLanguageAsNotConfigured() {
+        assertThatThrownBy(() -> client().client().translate("검토해주세요.", null, "en"))
+                .isInstanceOf(CustomException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.TRANSLATION_LANGUAGE_NOT_CONFIGURED);
     }
 
     private void assertError(OpenAiTranslationClient client, ErrorCode errorCode) {

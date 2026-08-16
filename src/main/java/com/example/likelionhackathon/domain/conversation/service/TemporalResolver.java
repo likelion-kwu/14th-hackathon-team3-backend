@@ -43,15 +43,21 @@ public class TemporalResolver {
             case TOMORROW -> today.plusDays(1);
             case DAY_AFTER_TOMORROW -> today.plusDays(2);
             case NEXT_WEEK -> expression.dayOfWeek() == null ? today.plusWeeks(1)
-                    : today.plusWeeks(1).with(TemporalAdjusters.previousOrSame(parseDay(expression.dayOfWeek())));
+                    : today.plusWeeks(1)
+                            .with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
+                            .with(TemporalAdjusters.nextOrSame(parseDay(expression.dayOfWeek())));
             case NEXT_DAY_OF_WEEK -> today.with(TemporalAdjusters.next(parseDay(expression.dayOfWeek())));
             case NONE -> explicitDate(expression);
         };
     }
 
     private LocalDate explicitDate(TemporalExpression expression) {
-        try { return LocalDate.parse(expression.explicitDate()); }
-        catch (DateTimeParseException | NullPointerException exception) {
+        String value = expression.explicitDate();
+        if (value == null) {
+            throw new IllegalArgumentException("Resolved expression has no valid date");
+        }
+        try { return LocalDate.parse(value); }
+        catch (DateTimeParseException exception) {
             throw new IllegalArgumentException("Resolved expression has no valid date", exception);
         }
     }

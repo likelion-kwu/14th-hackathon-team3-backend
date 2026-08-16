@@ -114,6 +114,9 @@ public class OpenAiTranslationClient {
     }
 
     private String languageName(String language) {
+        if (language == null) {
+            throw new CustomException(ErrorCode.TRANSLATION_LANGUAGE_NOT_CONFIGURED);
+        }
         return switch (language) {
             case "ko" -> "Korean";
             case "en" -> "English";
