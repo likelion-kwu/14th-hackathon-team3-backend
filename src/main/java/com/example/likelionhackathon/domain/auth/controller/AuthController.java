@@ -27,6 +27,13 @@ public class AuthController {
         return ApiResponse.success("로그인이 완료되었습니다.", authService.login(request));
     }
 
+    @Operation(summary = "로그아웃")
+    @PostMapping("/logout")
+    public ApiResponse<Void> logout() {
+        authService.logout();
+        return ApiResponse.success("로그아웃이 완료되었습니다.", null);
+    }
+
     @Operation(summary = "이메일 인증번호 요청")
     @PostMapping("/email-verifications")
     public ApiResponse<Void> requestEmailVerification(@Valid @RequestBody AuthRequest.EmailVerificationRequest request) {

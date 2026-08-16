@@ -1,6 +1,7 @@
 package com.example.likelionhackathon.domain.auth.controller;
 
 import com.example.likelionhackathon.domain.user.entity.User;
+import com.example.likelionhackathon.domain.user.entity.UserEnums.ActivityStatus;
 import com.example.likelionhackathon.domain.user.repository.UserRepository;
 import com.example.likelionhackathon.global.security.jwt.JwtTokenProvider;
 import com.jayway.jsonpath.JsonPath;
@@ -16,6 +17,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.assertj.core.api.Assertions.assertThat;
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -46,8 +48,11 @@ class AuthControllerTest {
                 .andExpect(result -> {
                     String response = result.getResponse().getContentAsString();
                     String token = JsonPath.read(response, "$.data.accessToken");
-                    org.assertj.core.api.Assertions.assertThat(jwtTokenProvider.getUserId(token)).isEqualTo(userId);
+                    assertThat(jwtTokenProvider.getUserId(token)).isEqualTo(userId);
                 });
+
+        assertThat(userRepository.findById(userId).orElseThrow().getActivityStatus())
+                .isEqualTo(ActivityStatus.ACTIVE);
     }
 
     @Test
@@ -66,6 +71,51 @@ class AuthControllerTest {
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value("401INVALID_LOGIN_CREDENTIALS"))
                 .andExpect(jsonPath("$.message").value("이메일 또는 비밀번호가 올바르지 않습니다."));
+
+        assertThat(userRepository.findById(userId).orElseThrow().getActivityStatus())
+                .isEqualTo(ActivityStatus.OFF);
+    }
+
+    @Test
+    void loginFailurePreservesActiveStatus() throws Exception {
+        User user = userRepository.findById(userId).orElseThrow();
+        user.changeActivityStatus(ActivityStatus.ACTIVE);
+        userRepository.saveAndFlush(user);
+
+        mockMvc.perform(post("/api/v1/auth/login").contentType(MediaType.APPLICATION_JSON)
+                        .content(loginRequest("test@example.com", "wrongPassword!")))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("401INVALID_LOGIN_CREDENTIALS"))
+                .andExpect(jsonPath("$.message").value("이메일 또는 비밀번호가 올바르지 않습니다."));
+
+        assertThat(userRepository.findById(userId).orElseThrow().getActivityStatus())
+                .isEqualTo(ActivityStatus.ACTIVE);
+    }
+
+    @Test
+    void logoutChangesCurrentUserActivityStatusToOff() throws Exception {
+        User user = userRepository.findById(userId).orElseThrow();
+        user.changeActivityStatus(ActivityStatus.ACTIVE);
+        userRepository.saveAndFlush(user);
+
+        String accessToken = jwtTokenProvider.createAccessToken(userId);
+        mockMvc.perform(post("/api/v1/auth/logout")
+                        .header("Authorization", "Bearer " + accessToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.code").value("200OK"))
+                .andExpect(jsonPath("$.message").value("로그아웃이 완료되었습니다."))
+                .andExpect(jsonPath("$.data").doesNotExist());
+
+        assertThat(userRepository.findById(userId).orElseThrow().getActivityStatus())
+                .isEqualTo(ActivityStatus.OFF);
+    }
+
+    @Test
+    void logoutRequiresJwt() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/logout"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("401UNAUTHORIZED"));
     }
 
     @Test
