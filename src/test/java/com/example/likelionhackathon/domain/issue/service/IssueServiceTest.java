@@ -264,7 +264,7 @@ class IssueServiceTest {
         when(cycleRepository.findById(CYCLE_ID)).thenReturn(Optional.of(cycle()));
         when(issueMemberPort.findCurrentMember(CYCLE_ID))
                 .thenReturn(Optional.of(new IssueMemberPort.MemberProfile(5L, "김민준", null, null, null)));
-        when(cycleIssuePort.statsOf(CYCLE_ID)).thenReturn(new IssueStats(2, 1, 1, 0, 0));
+        when(cycleIssuePort.statsOf(CYCLE_ID)).thenReturn(new IssueStats(2, 1, 1, 0, 0, 0));
 
         issueService.changeStatus(ISSUE_ID, new IssueRequest.ChangeStatus(IssueStatus.DONE, "마케팅팀 최종 승인 완료"));
 
@@ -285,7 +285,7 @@ class IssueServiceTest {
 
         when(issueRepository.findById(ISSUE_ID)).thenReturn(Optional.of(issue));
         when(cycleRepository.findById(CYCLE_ID)).thenReturn(Optional.of(cycle()));
-        when(cycleIssuePort.statsOf(CYCLE_ID)).thenReturn(new IssueStats(1, 1, 0, 0, 0));
+        when(cycleIssuePort.statsOf(CYCLE_ID)).thenReturn(new IssueStats(1, 1, 0, 0, 0, 0));
 
         issueService.changeStatus(ISSUE_ID, new IssueRequest.ChangeStatus(IssueStatus.DONE, null));
 
@@ -525,7 +525,7 @@ class IssueServiceTest {
         when(issueRepository.findById(ISSUE_ID)).thenReturn(Optional.of(issue));
         when(cycleRepository.findById(CYCLE_ID)).thenReturn(Optional.of(cycle()));
         lenient().when(issueMemberPort.findProfile(anyLong())).thenReturn(Optional.empty());
-        when(cycleIssuePort.statsOf(CYCLE_ID)).thenReturn(new IssueStats(11, 9, 2, 0, 0));
+        when(cycleIssuePort.statsOf(CYCLE_ID)).thenReturn(new IssueStats(11, 9, 2, 0, 0, 0));
 
         IssueResponse.StatusChanged response = issueService.changeStatus(
                 ISSUE_ID, new IssueRequest.ChangeStatus(IssueStatus.DONE, "마케팅팀 최종 승인 완료"));
