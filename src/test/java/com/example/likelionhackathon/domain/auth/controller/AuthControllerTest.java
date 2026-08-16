@@ -77,6 +77,22 @@ class AuthControllerTest {
     }
 
     @Test
+    void loginFailurePreservesActiveStatus() throws Exception {
+        User user = userRepository.findById(userId).orElseThrow();
+        user.changeActivityStatus(ActivityStatus.ACTIVE);
+        userRepository.saveAndFlush(user);
+
+        mockMvc.perform(post("/api/v1/auth/login").contentType(MediaType.APPLICATION_JSON)
+                        .content(loginRequest("test@example.com", "wrongPassword!")))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("401INVALID_LOGIN_CREDENTIALS"))
+                .andExpect(jsonPath("$.message").value("이메일 또는 비밀번호가 올바르지 않습니다."));
+
+        assertThat(userRepository.findById(userId).orElseThrow().getActivityStatus())
+                .isEqualTo(ActivityStatus.ACTIVE);
+    }
+
+    @Test
     void logoutChangesCurrentUserActivityStatusToOff() throws Exception {
         User user = userRepository.findById(userId).orElseThrow();
         user.changeActivityStatus(ActivityStatus.ACTIVE);
