@@ -67,6 +67,30 @@ public class UserService {
         return toActivityStatusResult(user);
     }
 
+    @Transactional(readOnly = true)
+    public UserResponse.LanguageResult getMyLanguage() {
+        return toLanguageResult(getCurrentUser());
+    }
+
+    @Transactional
+    public UserResponse.LanguageResult changeMyLanguage(UserRequest.UpdateLanguage request) {
+        User user = getCurrentUser();
+        user.changeLanguage(request.language());
+        return toLanguageResult(user);
+    }
+
+    @Transactional(readOnly = true)
+    public UserResponse.RegionResult getMyRegion() {
+        return toRegionResult(getCurrentUser());
+    }
+
+    @Transactional
+    public UserResponse.RegionResult changeMyRegion(UserRequest.UpdateRegion request) {
+        User user = getCurrentUser();
+        user.changeTimezone(request.region().getTimezone());
+        return toRegionResult(user);
+    }
+
     private User getCurrentUser() {
         Long userId = Long.valueOf(currentUserProvider.currentPrincipalKey());
         return userRepository.findById(userId)
@@ -75,5 +99,17 @@ public class UserService {
 
     private UserResponse.ActivityStatusResult toActivityStatusResult(User user) {
         return new UserResponse.ActivityStatusResult(user.getActivityStatus());
+    }
+
+    private UserResponse.LanguageResult toLanguageResult(User user) {
+        return new UserResponse.LanguageResult(user.getLanguage());
+    }
+
+
+    private UserResponse.RegionResult toRegionResult(User user) {
+        return new UserResponse.RegionResult(
+                com.example.likelionhackathon.domain.user.entity.UserEnums.UserRegion
+                        .fromTimezone(user.getTimezone()).orElse(null),
+                user.getTimezone());
     }
 }
