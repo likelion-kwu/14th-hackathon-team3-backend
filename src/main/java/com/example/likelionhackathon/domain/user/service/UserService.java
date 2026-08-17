@@ -8,6 +8,7 @@ import com.example.likelionhackathon.domain.user.entity.User;
 import com.example.likelionhackathon.domain.user.repository.UserRepository;
 import com.example.likelionhackathon.global.error.ErrorCode;
 import com.example.likelionhackathon.global.error.exception.CustomException;
+import com.example.likelionhackathon.global.security.CurrentUserProvider;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -23,6 +24,7 @@ public class UserService {
     private final UserRepository userRepository;
     private final EmailVerificationRepository emailVerificationRepository;
     private final PasswordEncoder passwordEncoder;
+    private final CurrentUserProvider currentUserProvider;
 
     @Transactional
     public UserResponse.Signup signup(UserRequest.Signup request) {
@@ -49,5 +51,65 @@ public class UserService {
         emailVerificationRepository.delete(emailVerification);
 
         return new UserResponse.Signup(savedUser.getId());
+    }
+
+    @Transactional(readOnly = true)
+    public UserResponse.ActivityStatusResult getActivityStatus() {
+        return toActivityStatusResult(getCurrentUser());
+    }
+
+    @Transactional
+    public UserResponse.ActivityStatusResult updateActivityStatus(
+            UserRequest.UpdateActivityStatus request
+    ) {
+        User user = getCurrentUser();
+        user.changeActivityStatus(request.status());
+        return toActivityStatusResult(user);
+    }
+
+    @Transactional(readOnly = true)
+    public UserResponse.LanguageResult getMyLanguage() {
+        return toLanguageResult(getCurrentUser());
+    }
+
+    @Transactional
+    public UserResponse.LanguageResult changeMyLanguage(UserRequest.UpdateLanguage request) {
+        User user = getCurrentUser();
+        user.changeLanguage(request.language());
+        return toLanguageResult(user);
+    }
+
+    @Transactional(readOnly = true)
+    public UserResponse.RegionResult getMyRegion() {
+        return toRegionResult(getCurrentUser());
+    }
+
+    @Transactional
+    public UserResponse.RegionResult changeMyRegion(UserRequest.UpdateRegion request) {
+        User user = getCurrentUser();
+        user.changeTimezone(request.region().getTimezone());
+        return toRegionResult(user);
+    }
+
+    private User getCurrentUser() {
+        Long userId = Long.valueOf(currentUserProvider.currentPrincipalKey());
+        return userRepository.findById(userId)
+                .orElseThrow(() -> new CustomException(ErrorCode.USER_NOT_FOUND));
+    }
+
+    private UserResponse.ActivityStatusResult toActivityStatusResult(User user) {
+        return new UserResponse.ActivityStatusResult(user.getActivityStatus());
+    }
+
+    private UserResponse.LanguageResult toLanguageResult(User user) {
+        return new UserResponse.LanguageResult(user.getLanguage());
+    }
+
+
+    private UserResponse.RegionResult toRegionResult(User user) {
+        return new UserResponse.RegionResult(
+                com.example.likelionhackathon.domain.user.entity.UserEnums.UserRegion
+                        .fromTimezone(user.getTimezone()).orElse(null),
+                user.getTimezone());
     }
 }

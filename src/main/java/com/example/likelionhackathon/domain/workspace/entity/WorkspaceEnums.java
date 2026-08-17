@@ -10,6 +10,11 @@ public final class WorkspaceEnums {
         ARCHIVED
     }
 
+    public enum WorkspaceCompanyRole {
+        HOST,
+        PARTNER
+    }
+
     public enum WorkspaceRole {
         OWNER,
         ADMIN,

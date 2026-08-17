@@ -12,6 +12,8 @@ import com.example.likelionhackathon.domain.project.entity.ProjectTeam;
 import com.example.likelionhackathon.domain.project.repository.ProjectMemberRepository;
 import com.example.likelionhackathon.domain.project.repository.ProjectRepository;
 import com.example.likelionhackathon.domain.workspace.entity.Workspace;
+import com.example.likelionhackathon.domain.workspace.entity.WorkspaceCompany;
+import com.example.likelionhackathon.domain.workspace.entity.WorkspaceEnums.WorkspaceCompanyRole;
 import com.example.likelionhackathon.domain.workspace.entity.WorkspaceEnums.WorkspaceMemberStatus;
 import com.example.likelionhackathon.domain.workspace.entity.WorkspaceMember;
 import com.example.likelionhackathon.domain.workspace.repository.WorkspaceMemberRepository;
@@ -282,6 +284,32 @@ public class ProjectService {
             Workspace workspace,
             List<ProjectRequest.ParticipatingCompany> requestedCompanies
     ) {
+        if (!workspace.getCompanies().isEmpty()) {
+            return requestedCompanies.stream()
+                    .map(requested -> {
+                        WorkspaceCompany company = workspace.getCompanies().stream()
+                                .filter(candidate -> Objects.equals(
+                                        candidate.getId(), requested.companyId()
+                                ))
+                                .findFirst()
+                                .orElseThrow(() -> new CustomException(ErrorCode.INVALID_PROJECT_INPUT));
+                        WorkspaceCompanyRole expectedRole = requested.role()
+                                == ParticipatingCompanyRole.HOST
+                                ? WorkspaceCompanyRole.HOST
+                                : WorkspaceCompanyRole.PARTNER;
+                        if (company.getRole() != expectedRole) {
+                            throw new CustomException(ErrorCode.INVALID_PROJECT_INPUT);
+                        }
+                        return new ProjectCompany(
+                                company.getId(),
+                                company.getName(),
+                                requested.role()
+                        );
+                    })
+                    .toList();
+        }
+
+        // companyId 도입 전에 생성된 워크스페이스의 기존 동작을 유지한다.
         List<String> partnerNames = new ArrayList<>(workspace.getCollaboratingCompanyNames());
         int partnerIndex = 0;
         List<ProjectCompany> companies = new ArrayList<>();

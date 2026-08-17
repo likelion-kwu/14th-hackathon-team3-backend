@@ -45,6 +45,15 @@ public enum ErrorCode {
     MEMBER_NOT_FOUND(HttpStatus.NOT_FOUND, "404MEMBER_NOT_FOUND", "멤버를 찾을 수 없습니다."),
     LAST_OWNER_CANNOT_CHANGE(HttpStatus.CONFLICT, "409LAST_OWNER_CANNOT_CHANGE", "마지막 OWNER는 변경할 수 없습니다."),
 
+    // Conversation
+    SELF_CONVERSATION_NOT_ALLOWED(HttpStatus.BAD_REQUEST, "400SELF_CONVERSATION_NOT_ALLOWED", "자기 자신과의 대화는 생성할 수 없습니다."),
+    CONVERSATION_NOT_FOUND(HttpStatus.NOT_FOUND, "404CONVERSATION_NOT_FOUND", "대화를 찾을 수 없습니다."),
+    CONVERSATION_ACCESS_DENIED(HttpStatus.FORBIDDEN, "403CONVERSATION_ACCESS_DENIED", "대화 접근 권한이 없습니다."),
+    TRANSLATION_LANGUAGE_NOT_CONFIGURED(HttpStatus.UNPROCESSABLE_CONTENT, "422TRANSLATION_LANGUAGE_NOT_CONFIGURED", "메시지 번역에 필요한 사용자 언어가 설정되지 않았습니다."),
+    TEMPORAL_CONTEXT_NOT_CONFIGURED(HttpStatus.UNPROCESSABLE_CONTENT, "422TEMPORAL_CONTEXT_NOT_CONFIGURED", "날짜와 시간을 명확화하는 데 필요한 사용자 시간대가 설정되지 않았습니다."),
+    AI_TRANSLATION_FAILED(HttpStatus.BAD_GATEWAY, "502AI_TRANSLATION_FAILED", "AI 메시지 번역에 실패했습니다."),
+    AI_TRANSLATION_TIMEOUT(HttpStatus.GATEWAY_TIMEOUT, "504AI_TRANSLATION_TIMEOUT", "AI 메시지 번역 요청 시간이 초과되었습니다."),
+
     // Project
     INVALID_PROJECT_INPUT(HttpStatus.BAD_REQUEST, "400INVALID_PROJECT_INPUT", "프로젝트 입력값이 올바르지 않습니다."),
     PROJECT_CREATE_DENIED(HttpStatus.FORBIDDEN, "403PROJECT_CREATE_DENIED", "프로젝트 생성 권한이 없습니다."),
@@ -79,7 +88,24 @@ public enum ErrorCode {
     HANDOVER_NOT_READY(HttpStatus.CONFLICT, "409HANDOVER_NOT_READY", "인수인계 초안 또는 전달 설정이 완료되지 않았습니다."),
     HANDOVER_VERSION_CONFLICT(HttpStatus.CONFLICT, "409HANDOVER_VERSION_CONFLICT", "최신 인수인계 초안 버전이 아닙니다."),
     HANDOVER_ALREADY_DELIVERED(HttpStatus.CONFLICT, "409HANDOVER_ALREADY_DELIVERED", "인수인계가 이미 전달 또는 예약되었습니다."),
-    REVIEW_ALERT_NOT_ACKNOWLEDGED(HttpStatus.UNPROCESSABLE_CONTENT, "422REVIEW_ALERT_NOT_ACKNOWLEDGED", "확인 필요 항목을 인지해야 합니다.");
+    REVIEW_ALERT_NOT_ACKNOWLEDGED(HttpStatus.UNPROCESSABLE_CONTENT, "422REVIEW_ALERT_NOT_ACKNOWLEDGED", "확인 필요 항목을 인지해야 합니다."),
+
+    // Cycle
+    // 사이클 명세의 공통 규약은 실패 code를 "상태코드 + 도메인" 형식으로 정의한다. (ex. 404CYCLE)
+    // 상세 사유는 CustomException 의 detailMessage 로 구분한다.
+    CYCLE_INVALID_INPUT(HttpStatus.BAD_REQUEST, "400CYCLE", "사이클 입력값이 올바르지 않습니다."),
+    CYCLE_NOT_FOUND(HttpStatus.NOT_FOUND, "404CYCLE", "존재하지 않는 사이클입니다."),
+    CYCLE_CONFLICT(HttpStatus.CONFLICT, "409CYCLE", "요청을 처리할 수 없는 사이클 상태입니다."),
+
+    // Issue
+    ISSUE_INVALID_INPUT(HttpStatus.BAD_REQUEST, "400ISSUE", "이슈 입력값이 올바르지 않습니다."),
+    ISSUE_NOT_FOUND(HttpStatus.NOT_FOUND, "404ISSUE", "존재하지 않는 이슈입니다."),
+    ISSUE_CONFLICT(HttpStatus.CONFLICT, "409ISSUE", "요청을 처리할 수 없는 이슈 상태입니다."),
+    ISSUE_FILE_TOO_LARGE(HttpStatus.CONTENT_TOO_LARGE, "413ISSUE", "파일 용량이 초과되었습니다."),
+
+    COMMENT_INVALID_INPUT(HttpStatus.BAD_REQUEST, "400COMMENT", "댓글 입력값이 올바르지 않습니다."),
+    COMMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "404COMMENT", "존재하지 않는 댓글입니다."),
+    COMMENT_FORBIDDEN(HttpStatus.FORBIDDEN, "403COMMENT", "본인이 작성한 댓글만 수정하거나 삭제할 수 있습니다.");
 
     private final HttpStatus httpStatus;
     private final String code;

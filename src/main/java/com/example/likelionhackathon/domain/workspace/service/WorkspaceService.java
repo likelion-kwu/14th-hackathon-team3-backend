@@ -2,7 +2,11 @@ package com.example.likelionhackathon.domain.workspace.service;
 
 import com.example.likelionhackathon.domain.workspace.dto.WorkspaceRequest;
 import com.example.likelionhackathon.domain.workspace.dto.WorkspaceResponse;
+import com.example.likelionhackathon.domain.user.entity.User;
+import com.example.likelionhackathon.domain.user.repository.UserRepository;
 import com.example.likelionhackathon.domain.workspace.entity.Workspace;
+import com.example.likelionhackathon.domain.workspace.entity.WorkspaceCompany;
+import com.example.likelionhackathon.domain.workspace.entity.WorkspaceEnums.WorkspaceCompanyRole;
 import com.example.likelionhackathon.domain.workspace.entity.WorkspaceEnums.InvitationStatus;
 import com.example.likelionhackathon.domain.workspace.entity.WorkspaceEnums.InvitationType;
 import com.example.likelionhackathon.domain.workspace.entity.WorkspaceEnums.MemberActionType;
@@ -29,9 +33,12 @@ import java.security.SecureRandom;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
@@ -54,6 +61,7 @@ public class WorkspaceService {
     private final WorkspaceInvitationRepository invitationRepository;
     private final CurrentUserProvider currentUserProvider;
     private final WorkspaceProjectCounter projectCounter;
+    private final UserRepository userRepository;
 
     @Value("${workspace.invitation-base-url:https://relai.example.com/invite}")
     private String invitationBaseUrl;
@@ -67,13 +75,20 @@ public class WorkspaceService {
         }
 
         String countryCode = normalizeCountryCode(request.companyCountryCode());
+        List<NormalizedCompany> partnerCompanies = normalizeCompanies(
+                request.safeCollaboratingCompanies()
+        );
         Workspace workspace = Workspace.create(
                 workspaceName,
                 generateOrganizationCode(countryCode),
                 request.companyName().trim(),
                 countryCode,
-                normalizeNames(request.safeCollaboratingCompanyNames())
+                partnerCompanies.stream().map(NormalizedCompany::name).toList()
         );
+        workspace.addCompany(WorkspaceCompany.host(request.companyName().trim(), countryCode));
+        partnerCompanies.forEach(company -> workspace.addCompany(
+                WorkspaceCompany.partner(company.name(), company.countryCode())
+        ));
 
         try {
             Workspace saved = workspaceRepository.saveAndFlush(workspace);
@@ -88,7 +103,16 @@ public class WorkspaceService {
             return new WorkspaceResponse.Created(
                     saved.getId(),
                     saved.getOrganizationCode(),
-                    saved.getStatus()
+                    saved.getStatus(),
+                    saved.getCompanies().stream()
+                            .filter(company -> company.getRole() == WorkspaceCompanyRole.HOST)
+                            .findFirst()
+                            .map(this::toCompanyResponse)
+                            .orElseThrow(() -> new CustomException(ErrorCode.INTERNAL_SERVER_ERROR)),
+                    saved.getCompanies().stream()
+                            .filter(company -> company.getRole() == WorkspaceCompanyRole.PARTNER)
+                            .map(this::toCompanyResponse)
+                            .toList()
             );
         } catch (DataIntegrityViolationException e) {
             throw new CustomException(ErrorCode.WORKSPACE_NAME_DUPLICATED);
@@ -117,18 +141,53 @@ public class WorkspaceService {
     }
 
     @Transactional(readOnly = true)
+    public WorkspaceResponse.Profile getMyProfile(Long workspaceId) {
+        String principalKey = currentUserProvider.currentPrincipalKey();
+        WorkspaceMember member = requireAccess(workspaceId, principalKey);
+        return toProfile(workspaceId, principalKey, member);
+    }
+
+    @Transactional
+    public WorkspaceResponse.Profile updateMyProfile(
+            Long workspaceId,
+            WorkspaceRequest.UpdateProfile request
+    ) {
+        validateProfileUpdate(request);
+        String principalKey = currentUserProvider.currentPrincipalKey();
+        WorkspaceMember member = requireAccess(workspaceId, principalKey);
+
+        member.updateProfile(
+                normalizeRequiredProfileValue(request.name()),
+                normalizeRequiredProfileValue(request.companyName()),
+                normalizeRequiredProfileValue(request.teamName()),
+                request.jobTitle() == null
+                        ? member.getJobTitle()
+                        : normalizeOptionalProfileValue(request.jobTitle())
+        );
+        return toProfile(workspaceId, principalKey, member);
+    }
+
+    @Transactional
     public WorkspaceResponse.Detail getDetail(Long workspaceId) {
         Workspace workspace = findWorkspace(workspaceId);
         WorkspaceMember membership = requireAccess(workspaceId);
+        ensureCompanyRegistry(workspace);
+        workspaceRepository.flush();
+        WorkspaceResponse.Company hostCompany = workspace.getCompanies().stream()
+                .filter(company -> company.getRole() == WorkspaceCompanyRole.HOST)
+                .findFirst()
+                .map(this::toCompanyResponse)
+                .orElseThrow(() -> new CustomException(ErrorCode.INTERNAL_SERVER_ERROR));
+        List<WorkspaceResponse.Company> partnerCompanies = workspace.getCompanies().stream()
+                .filter(company -> company.getRole() == WorkspaceCompanyRole.PARTNER)
+                .map(this::toCompanyResponse)
+                .toList();
         return new WorkspaceResponse.Detail(
                 workspace.getId(),
                 workspace.getName(),
                 workspace.getOrganizationCode(),
-                new WorkspaceResponse.Company(
-                        workspace.getCompanyName(),
-                        workspace.getCompanyCountryCode()
-                ),
-                List.copyOf(workspace.getCollaboratingCompanyNames()),
+                hostCompany,
+                partnerCompanies,
                 membership.getRole(),
                 memberRepository.countByWorkspaceIdAndStatus(
                         workspaceId,
@@ -208,6 +267,78 @@ public class WorkspaceService {
                 : List.of();
 
         return new WorkspaceResponse.Members(members, pendingInvitations);
+    }
+
+    @Transactional(readOnly = true)
+    public WorkspaceResponse.OrganizationChart getOrganizationChart(Long workspaceId) {
+        findWorkspace(workspaceId);
+        requireAccess(workspaceId);
+
+        List<WorkspaceMember> members = memberRepository
+                .findAllByWorkspaceIdAndStatusOrderByIdAsc(workspaceId, WorkspaceMemberStatus.ACTIVE);
+        Map<Long, User> usersById = findUsersById(members);
+
+        Map<String, List<WorkspaceResponse.OrganizationMember>> membersByTeam = new LinkedHashMap<>();
+        for (WorkspaceMember member : members) {
+            Long userId = parseUserId(member.getPrincipalKey());
+            User user = usersById.get(userId);
+            if (user == null) {
+                throw new CustomException(ErrorCode.USER_NOT_FOUND);
+            }
+            membersByTeam.computeIfAbsent(member.getTeamName(), ignored -> new ArrayList<>())
+                    .add(toOrganizationMember(member, user));
+        }
+
+        Comparator<WorkspaceResponse.OrganizationMember> memberComparator = Comparator
+                .comparing(WorkspaceResponse.OrganizationMember::name)
+                .thenComparing(WorkspaceResponse.OrganizationMember::memberId);
+        Comparator<String> teamComparator = Comparator.nullsLast(Comparator.naturalOrder());
+
+        List<WorkspaceResponse.OrganizationTeam> teams = membersByTeam.entrySet().stream()
+                .sorted(Map.Entry.comparingByKey(teamComparator))
+                .map(entry -> new WorkspaceResponse.OrganizationTeam(
+                        entry.getKey(),
+                        entry.getValue().stream().sorted(memberComparator).toList()
+                ))
+                .toList();
+
+        return new WorkspaceResponse.OrganizationChart(workspaceId, teams);
+    }
+
+    private Map<Long, User> findUsersById(List<WorkspaceMember> members) {
+        List<Long> userIds = members.stream()
+                .map(WorkspaceMember::getPrincipalKey)
+                .map(this::parseUserId)
+                .distinct()
+                .toList();
+        Map<Long, User> usersById = new LinkedHashMap<>();
+        userRepository.findAllById(userIds).forEach(user -> usersById.put(user.getId(), user));
+        if (usersById.size() != userIds.size()) {
+            throw new CustomException(ErrorCode.USER_NOT_FOUND);
+        }
+        return usersById;
+    }
+
+    private Long parseUserId(String principalKey) {
+        try {
+            return Long.valueOf(principalKey);
+        } catch (NumberFormatException e) {
+            throw new CustomException(ErrorCode.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    private WorkspaceResponse.OrganizationMember toOrganizationMember(
+            WorkspaceMember member,
+            User user
+    ) {
+        return new WorkspaceResponse.OrganizationMember(
+                member.getId(),
+                member.getName(),
+                member.getEmail(),
+                member.getCompanyName(),
+                member.getJobTitle(),
+                user.getActivityStatus()
+        );
     }
 
     @Transactional
@@ -354,12 +485,54 @@ public class WorkspaceService {
     }
 
     private WorkspaceMember requireAccess(Long workspaceId) {
-        return memberRepository.findByWorkspaceIdAndPrincipalKey(
-                        workspaceId,
-                        currentUserProvider.currentPrincipalKey()
-                )
+        return requireAccess(workspaceId, currentUserProvider.currentPrincipalKey());
+    }
+
+    private WorkspaceMember requireAccess(Long workspaceId, String principalKey) {
+        return memberRepository.findByWorkspaceIdAndPrincipalKey(workspaceId, principalKey)
                 .filter(member -> member.getStatus() == WorkspaceMemberStatus.ACTIVE)
                 .orElseThrow(() -> new CustomException(ErrorCode.WORKSPACE_ACCESS_DENIED));
+    }
+
+    private WorkspaceResponse.Profile toProfile(
+            Long workspaceId,
+            String principalKey,
+            WorkspaceMember member
+    ) {
+        return new WorkspaceResponse.Profile(
+                Long.valueOf(principalKey),
+                workspaceId,
+                member.getName(),
+                member.getCompanyName(),
+                member.getTeamName(),
+                member.getJobTitle()
+        );
+    }
+
+    private void validateProfileUpdate(WorkspaceRequest.UpdateProfile request) {
+        if (request.name() == null
+                && request.companyName() == null
+                && request.teamName() == null
+                && request.jobTitle() == null) {
+            throw new CustomException(ErrorCode.INVALID_INPUT_VALUE);
+        }
+        validateRequiredProfileValue(request.name());
+        validateRequiredProfileValue(request.companyName());
+        validateRequiredProfileValue(request.teamName());
+    }
+
+    private void validateRequiredProfileValue(String value) {
+        if (value != null && value.isBlank()) {
+            throw new CustomException(ErrorCode.INVALID_INPUT_VALUE);
+        }
+    }
+
+    private String normalizeRequiredProfileValue(String value) {
+        return value == null ? null : value.trim();
+    }
+
+    private String normalizeOptionalProfileValue(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
     }
 
     private WorkspaceMember requireAdmin(Long workspaceId) {
@@ -405,9 +578,9 @@ public class WorkspaceService {
         if (request == null
                 || isBlankOrTooLong(request.name(), 100)
                 || isBlankOrTooLong(request.companyName(), 100)
-                || request.companyCountryCode() == null
-                || request.companyCountryCode().trim().length() != 2
-                || hasInvalidName(request.safeCollaboratingCompanyNames())
+                || isInvalidCountryCode(request.companyCountryCode())
+                || hasInvalidCompany(request.safeCollaboratingCompanies())
+                || hasDuplicateCompanyName(request.companyName(), request.safeCollaboratingCompanies())
                 || hasInvalidEmail(request.safeInviteeEmails())) {
             throw new CustomException(ErrorCode.INVALID_WORKSPACE_INPUT);
         }
@@ -417,11 +590,13 @@ public class WorkspaceService {
         if (request == null
                 || isBlankOrTooLong(request.name(), 100)
                 || isBlankOrTooLong(request.companyName(), 100)
-                || request.companyCountryCode() == null
-                || request.companyCountryCode().trim().length() != 2
+                || isInvalidCountryCode(request.companyCountryCode())
                 || request.status() == null
                 || request.version() == null
-                || hasInvalidName(request.safeCollaboratingCompanyNames())) {
+                || hasInvalidName(request.safeCollaboratingCompanyNames())
+                || hasDuplicateLegacyCompanyName(
+                        request.companyName(), request.safeCollaboratingCompanyNames()
+                )) {
             throw new CustomException(ErrorCode.INVALID_WORKSPACE_INPUT);
         }
     }
@@ -519,6 +694,17 @@ public class WorkspaceService {
                 .toList();
     }
 
+    private List<NormalizedCompany> normalizeCompanies(
+            Collection<WorkspaceRequest.CollaboratingCompany> companies
+    ) {
+        return companies.stream()
+                .map(company -> new NormalizedCompany(
+                        company.name().trim(),
+                        normalizeCountryCode(company.countryCode())
+                ))
+                .toList();
+    }
+
     private List<String> normalizeEmails(Collection<String> emails) {
         Set<String> normalized = new LinkedHashSet<>();
         emails.forEach(email -> normalized.add(email.trim().toLowerCase(Locale.ROOT)));
@@ -527,6 +713,38 @@ public class WorkspaceService {
 
     private boolean hasInvalidName(Collection<String> names) {
         return names.stream().anyMatch(name -> isBlankOrTooLong(name, 100));
+    }
+
+    private boolean hasInvalidCompany(Collection<WorkspaceRequest.CollaboratingCompany> companies) {
+        return companies.stream().anyMatch(company -> company == null
+                || isBlankOrTooLong(company.name(), 100)
+                || isInvalidCountryCode(company.countryCode()));
+    }
+
+    private boolean hasDuplicateCompanyName(
+            String hostCompanyName,
+            Collection<WorkspaceRequest.CollaboratingCompany> companies
+    ) {
+        Set<String> names = new LinkedHashSet<>();
+        names.add(hostCompanyName.trim().toLowerCase(Locale.ROOT));
+        return companies.stream()
+                .map(company -> company.name().trim().toLowerCase(Locale.ROOT))
+                .anyMatch(name -> !names.add(name));
+    }
+
+    private boolean hasDuplicateLegacyCompanyName(
+            String hostCompanyName,
+            Collection<String> partnerCompanyNames
+    ) {
+        Set<String> names = new LinkedHashSet<>();
+        names.add(hostCompanyName.trim().toLowerCase(Locale.ROOT));
+        return partnerCompanyNames.stream()
+                .map(name -> name.trim().toLowerCase(Locale.ROOT))
+                .anyMatch(name -> !names.add(name));
+    }
+
+    private boolean isInvalidCountryCode(String countryCode) {
+        return countryCode == null || !countryCode.trim().matches("[A-Za-z]{2}");
     }
 
     private boolean hasInvalidEmail(Collection<String> emails) {
@@ -544,5 +762,30 @@ public class WorkspaceService {
             return null;
         }
         return value.trim();
+    }
+
+    private WorkspaceResponse.Company toCompanyResponse(WorkspaceCompany company) {
+        return new WorkspaceResponse.Company(
+                company.getId(),
+                company.getName(),
+                company.getCountryCode(),
+                company.getRole()
+        );
+    }
+
+    private void ensureCompanyRegistry(Workspace workspace) {
+        if (!workspace.getCompanies().isEmpty()) {
+            return;
+        }
+        workspace.addCompany(WorkspaceCompany.host(
+                workspace.getCompanyName(),
+                workspace.getCompanyCountryCode()
+        ));
+        workspace.getCollaboratingCompanyNames().forEach(name -> workspace.addCompany(
+                WorkspaceCompany.partner(name, workspace.getCompanyCountryCode())
+        ));
+    }
+
+    private record NormalizedCompany(String name, String countryCode) {
     }
 }

@@ -21,16 +21,22 @@ public final class WorkspaceRequest {
             String name,
             String companyName,
             String companyCountryCode,
-            List<String> collaboratingCompanyNames,
+            List<CollaboratingCompany> collaboratingCompanies,
             List<String> inviteeEmails
     ) {
-        public List<String> safeCollaboratingCompanyNames() {
-            return collaboratingCompanyNames == null ? List.of() : collaboratingCompanyNames;
+        public List<CollaboratingCompany> safeCollaboratingCompanies() {
+            return collaboratingCompanies == null ? List.of() : collaboratingCompanies;
         }
 
         public List<String> safeInviteeEmails() {
             return inviteeEmails == null ? List.of() : inviteeEmails;
         }
+    }
+
+    public record CollaboratingCompany(
+            String name,
+            String countryCode
+    ) {
     }
 
     public record Update(
@@ -76,6 +82,14 @@ public final class WorkspaceRequest {
             @NotBlank @Size(max = 100) String name,
             @NotBlank @Size(max = 100) String companyName,
             @NotBlank @Size(max = 100) String teamName,
+            @Size(max = 100) String jobTitle
+    ) {
+    }
+
+    public record UpdateProfile(
+            @Size(max = 100) String name,
+            @Size(max = 100) String companyName,
+            @Size(max = 100) String teamName,
             @Size(max = 100) String jobTitle
     ) {
     }

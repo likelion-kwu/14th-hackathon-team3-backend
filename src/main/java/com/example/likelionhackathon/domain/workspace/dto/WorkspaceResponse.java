@@ -1,6 +1,8 @@
 package com.example.likelionhackathon.domain.workspace.dto;
 
+import com.example.likelionhackathon.domain.user.entity.UserEnums.ActivityStatus;
 import com.example.likelionhackathon.domain.workspace.entity.WorkspaceEnums.WorkspaceMemberStatus;
+import com.example.likelionhackathon.domain.workspace.entity.WorkspaceEnums.WorkspaceCompanyRole;
 import com.example.likelionhackathon.domain.workspace.entity.WorkspaceEnums.WorkspaceRole;
 import com.example.likelionhackathon.domain.workspace.entity.WorkspaceEnums.WorkspaceStatus;
 
@@ -15,7 +17,9 @@ public final class WorkspaceResponse {
     public record Created(
             Long workspaceId,
             String organizationCode,
-            WorkspaceStatus status
+            WorkspaceStatus status,
+            Company company,
+            List<Company> collaboratingCompanies
     ) {
     }
 
@@ -34,7 +38,7 @@ public final class WorkspaceResponse {
             String name,
             String organizationCode,
             Company company,
-            List<String> collaboratingCompanies,
+            List<Company> collaboratingCompanies,
             WorkspaceRole myRole,
             long memberCount,
             long projectCount,
@@ -42,7 +46,12 @@ public final class WorkspaceResponse {
     ) {
     }
 
-    public record Company(String name, String countryCode) {
+    public record Company(
+            Long companyId,
+            String name,
+            String countryCode,
+            WorkspaceCompanyRole role
+    ) {
     }
 
     public record Updated(
@@ -100,6 +109,38 @@ public final class WorkspaceResponse {
             Long workspaceId,
             Long memberId,
             WorkspaceRole role
+    ) {
+    }
+
+    public record Profile(
+            Long userId,
+            Long workspaceId,
+            String name,
+            String companyName,
+            String teamName,
+            String jobTitle
+    ) {
+    }
+
+    public record OrganizationChart(
+            Long workspaceId,
+            List<OrganizationTeam> teams
+    ) {
+    }
+
+    public record OrganizationTeam(
+            String teamName,
+            List<OrganizationMember> members
+    ) {
+    }
+
+    public record OrganizationMember(
+            Long memberId,
+            String name,
+            String email,
+            String companyName,
+            String jobTitle,
+            ActivityStatus activityStatus
     ) {
     }
 }

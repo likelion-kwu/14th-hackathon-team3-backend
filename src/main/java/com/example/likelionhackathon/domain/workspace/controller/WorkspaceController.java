@@ -14,6 +14,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -74,6 +75,32 @@ public class WorkspaceController {
                 "워크스페이스 멤버를 조회했습니다.",
                 workspaceService.getMembers(workspaceId, status, keyword)
         );
+    }
+
+    @Operation(summary = "워크스페이스 조직도 조회")
+    @GetMapping("/workspaces/{workspaceId}/organization-chart")
+    public ApiResponse<WorkspaceResponse.OrganizationChart> getOrganizationChart(
+            @PathVariable Long workspaceId
+    ) {
+        return ApiResponse.success(
+                "조직도를 조회했습니다.",
+                workspaceService.getOrganizationChart(workspaceId)
+        );
+    }
+
+    @Operation(summary = "내 워크스페이스 프로필 조회")
+    @GetMapping("/workspaces/{workspaceId}/members/me/profile")
+    public ApiResponse<WorkspaceResponse.Profile> getMyProfile(@PathVariable Long workspaceId) {
+        return ApiResponse.success("내 프로필을 조회했습니다.", workspaceService.getMyProfile(workspaceId));
+    }
+
+    @Operation(summary = "내 워크스페이스 프로필 수정")
+    @PatchMapping("/workspaces/{workspaceId}/members/me/profile")
+    public ApiResponse<WorkspaceResponse.Profile> updateMyProfile(
+            @PathVariable Long workspaceId,
+            @Valid @RequestBody WorkspaceRequest.UpdateProfile request
+    ) {
+        return ApiResponse.success("프로필이 수정되었습니다.", workspaceService.updateMyProfile(workspaceId, request));
     }
 
     @Operation(summary = "워크스페이스 멤버 일괄 관리")

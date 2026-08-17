@@ -1,8 +1,13 @@
 package com.example.likelionhackathon.domain.user.dto;
 
+import com.example.likelionhackathon.domain.user.entity.UserEnums.ActivityStatus;
+import com.example.likelionhackathon.domain.user.entity.UserEnums.UserRegion;
+
 import com.example.likelionhackathon.global.validation.Utf8ByteLength;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
 public final class UserRequest {
@@ -22,5 +27,22 @@ public final class UserRequest {
             @NotBlank(message = "비밀번호 확인은 필수입니다.")
             String passwordConfirm
     ) {
+    }
+
+    public record UpdateActivityStatus(
+            @NotNull(message = "활동 상태는 필수입니다.")
+            ActivityStatus status
+    ) {
+    }
+
+    public record UpdateLanguage(
+            @NotBlank(message = "기본 언어는 필수입니다.")
+            @Pattern(regexp = "^(ko|en|ja)$", message = "지원하지 않는 기본 언어입니다.")
+            String language
+    ) {
+    }
+
+
+    public record UpdateRegion(@NotNull(message = "지역은 필수입니다.") UserRegion region) {
     }
 }

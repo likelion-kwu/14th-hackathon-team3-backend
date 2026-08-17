@@ -42,6 +42,9 @@ dependencies {
     runtimeOnly 'com.h2database:h2'
     // mysql 설정
     runtimeOnly 'com.mysql:mysql-connector-j'
+    // 첨부파일 S3 저장. Spring 버전에 묶이지 않도록 AWS SDK 를 직접 쓴다.
+    implementation platform('software.amazon.awssdk:bom:2.46.7')
+    implementation 'software.amazon.awssdk:s3'
 }
 
 tasks.named('test') {
