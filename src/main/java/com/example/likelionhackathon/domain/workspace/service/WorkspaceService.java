@@ -5,6 +5,8 @@ import com.example.likelionhackathon.domain.workspace.dto.WorkspaceResponse;
 import com.example.likelionhackathon.domain.user.entity.User;
 import com.example.likelionhackathon.domain.user.repository.UserRepository;
 import com.example.likelionhackathon.domain.workspace.entity.Workspace;
+import com.example.likelionhackathon.domain.workspace.entity.WorkspaceCompany;
+import com.example.likelionhackathon.domain.workspace.entity.WorkspaceEnums.WorkspaceCompanyRole;
 import com.example.likelionhackathon.domain.workspace.entity.WorkspaceEnums.InvitationStatus;
 import com.example.likelionhackathon.domain.workspace.entity.WorkspaceEnums.InvitationType;
 import com.example.likelionhackathon.domain.workspace.entity.WorkspaceEnums.MemberActionType;
@@ -73,13 +75,20 @@ public class WorkspaceService {
         }
 
         String countryCode = normalizeCountryCode(request.companyCountryCode());
+        List<NormalizedCompany> partnerCompanies = normalizeCompanies(
+                request.safeCollaboratingCompanies()
+        );
         Workspace workspace = Workspace.create(
                 workspaceName,
                 generateOrganizationCode(countryCode),
                 request.companyName().trim(),
                 countryCode,
-                normalizeNames(request.safeCollaboratingCompanyNames())
+                partnerCompanies.stream().map(NormalizedCompany::name).toList()
         );
+        workspace.addCompany(WorkspaceCompany.host(request.companyName().trim(), countryCode));
+        partnerCompanies.forEach(company -> workspace.addCompany(
+                WorkspaceCompany.partner(company.name(), company.countryCode())
+        ));
 
         try {
             Workspace saved = workspaceRepository.saveAndFlush(workspace);
@@ -94,7 +103,16 @@ public class WorkspaceService {
             return new WorkspaceResponse.Created(
                     saved.getId(),
                     saved.getOrganizationCode(),
-                    saved.getStatus()
+                    saved.getStatus(),
+                    saved.getCompanies().stream()
+                            .filter(company -> company.getRole() == WorkspaceCompanyRole.HOST)
+                            .findFirst()
+                            .map(this::toCompanyResponse)
+                            .orElseThrow(() -> new CustomException(ErrorCode.INTERNAL_SERVER_ERROR)),
+                    saved.getCompanies().stream()
+                            .filter(company -> company.getRole() == WorkspaceCompanyRole.PARTNER)
+                            .map(this::toCompanyResponse)
+                            .toList()
             );
         } catch (DataIntegrityViolationException e) {
             throw new CustomException(ErrorCode.WORKSPACE_NAME_DUPLICATED);
@@ -149,19 +167,27 @@ public class WorkspaceService {
         return toProfile(workspaceId, principalKey, member);
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public WorkspaceResponse.Detail getDetail(Long workspaceId) {
         Workspace workspace = findWorkspace(workspaceId);
         WorkspaceMember membership = requireAccess(workspaceId);
+        ensureCompanyRegistry(workspace);
+        workspaceRepository.flush();
+        WorkspaceResponse.Company hostCompany = workspace.getCompanies().stream()
+                .filter(company -> company.getRole() == WorkspaceCompanyRole.HOST)
+                .findFirst()
+                .map(this::toCompanyResponse)
+                .orElseThrow(() -> new CustomException(ErrorCode.INTERNAL_SERVER_ERROR));
+        List<WorkspaceResponse.Company> partnerCompanies = workspace.getCompanies().stream()
+                .filter(company -> company.getRole() == WorkspaceCompanyRole.PARTNER)
+                .map(this::toCompanyResponse)
+                .toList();
         return new WorkspaceResponse.Detail(
                 workspace.getId(),
                 workspace.getName(),
                 workspace.getOrganizationCode(),
-                new WorkspaceResponse.Company(
-                        workspace.getCompanyName(),
-                        workspace.getCompanyCountryCode()
-                ),
-                List.copyOf(workspace.getCollaboratingCompanyNames()),
+                hostCompany,
+                partnerCompanies,
                 membership.getRole(),
                 memberRepository.countByWorkspaceIdAndStatus(
                         workspaceId,
@@ -552,9 +578,9 @@ public class WorkspaceService {
         if (request == null
                 || isBlankOrTooLong(request.name(), 100)
                 || isBlankOrTooLong(request.companyName(), 100)
-                || request.companyCountryCode() == null
-                || request.companyCountryCode().trim().length() != 2
-                || hasInvalidName(request.safeCollaboratingCompanyNames())
+                || isInvalidCountryCode(request.companyCountryCode())
+                || hasInvalidCompany(request.safeCollaboratingCompanies())
+                || hasDuplicateCompanyName(request.companyName(), request.safeCollaboratingCompanies())
                 || hasInvalidEmail(request.safeInviteeEmails())) {
             throw new CustomException(ErrorCode.INVALID_WORKSPACE_INPUT);
         }
@@ -564,11 +590,13 @@ public class WorkspaceService {
         if (request == null
                 || isBlankOrTooLong(request.name(), 100)
                 || isBlankOrTooLong(request.companyName(), 100)
-                || request.companyCountryCode() == null
-                || request.companyCountryCode().trim().length() != 2
+                || isInvalidCountryCode(request.companyCountryCode())
                 || request.status() == null
                 || request.version() == null
-                || hasInvalidName(request.safeCollaboratingCompanyNames())) {
+                || hasInvalidName(request.safeCollaboratingCompanyNames())
+                || hasDuplicateLegacyCompanyName(
+                        request.companyName(), request.safeCollaboratingCompanyNames()
+                )) {
             throw new CustomException(ErrorCode.INVALID_WORKSPACE_INPUT);
         }
     }
@@ -666,6 +694,17 @@ public class WorkspaceService {
                 .toList();
     }
 
+    private List<NormalizedCompany> normalizeCompanies(
+            Collection<WorkspaceRequest.CollaboratingCompany> companies
+    ) {
+        return companies.stream()
+                .map(company -> new NormalizedCompany(
+                        company.name().trim(),
+                        normalizeCountryCode(company.countryCode())
+                ))
+                .toList();
+    }
+
     private List<String> normalizeEmails(Collection<String> emails) {
         Set<String> normalized = new LinkedHashSet<>();
         emails.forEach(email -> normalized.add(email.trim().toLowerCase(Locale.ROOT)));
@@ -674,6 +713,38 @@ public class WorkspaceService {
 
     private boolean hasInvalidName(Collection<String> names) {
         return names.stream().anyMatch(name -> isBlankOrTooLong(name, 100));
+    }
+
+    private boolean hasInvalidCompany(Collection<WorkspaceRequest.CollaboratingCompany> companies) {
+        return companies.stream().anyMatch(company -> company == null
+                || isBlankOrTooLong(company.name(), 100)
+                || isInvalidCountryCode(company.countryCode()));
+    }
+
+    private boolean hasDuplicateCompanyName(
+            String hostCompanyName,
+            Collection<WorkspaceRequest.CollaboratingCompany> companies
+    ) {
+        Set<String> names = new LinkedHashSet<>();
+        names.add(hostCompanyName.trim().toLowerCase(Locale.ROOT));
+        return companies.stream()
+                .map(company -> company.name().trim().toLowerCase(Locale.ROOT))
+                .anyMatch(name -> !names.add(name));
+    }
+
+    private boolean hasDuplicateLegacyCompanyName(
+            String hostCompanyName,
+            Collection<String> partnerCompanyNames
+    ) {
+        Set<String> names = new LinkedHashSet<>();
+        names.add(hostCompanyName.trim().toLowerCase(Locale.ROOT));
+        return partnerCompanyNames.stream()
+                .map(name -> name.trim().toLowerCase(Locale.ROOT))
+                .anyMatch(name -> !names.add(name));
+    }
+
+    private boolean isInvalidCountryCode(String countryCode) {
+        return countryCode == null || !countryCode.trim().matches("[A-Za-z]{2}");
     }
 
     private boolean hasInvalidEmail(Collection<String> emails) {
@@ -691,5 +762,30 @@ public class WorkspaceService {
             return null;
         }
         return value.trim();
+    }
+
+    private WorkspaceResponse.Company toCompanyResponse(WorkspaceCompany company) {
+        return new WorkspaceResponse.Company(
+                company.getId(),
+                company.getName(),
+                company.getCountryCode(),
+                company.getRole()
+        );
+    }
+
+    private void ensureCompanyRegistry(Workspace workspace) {
+        if (!workspace.getCompanies().isEmpty()) {
+            return;
+        }
+        workspace.addCompany(WorkspaceCompany.host(
+                workspace.getCompanyName(),
+                workspace.getCompanyCountryCode()
+        ));
+        workspace.getCollaboratingCompanyNames().forEach(name -> workspace.addCompany(
+                WorkspaceCompany.partner(name, workspace.getCompanyCountryCode())
+        ));
+    }
+
+    private record NormalizedCompany(String name, String countryCode) {
     }
 }
