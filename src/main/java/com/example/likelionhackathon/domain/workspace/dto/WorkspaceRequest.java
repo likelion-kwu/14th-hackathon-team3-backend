@@ -21,16 +21,22 @@ public final class WorkspaceRequest {
             String name,
             String companyName,
             String companyCountryCode,
-            List<String> collaboratingCompanyNames,
+            List<CollaboratingCompany> collaboratingCompanies,
             List<String> inviteeEmails
     ) {
-        public List<String> safeCollaboratingCompanyNames() {
-            return collaboratingCompanyNames == null ? List.of() : collaboratingCompanyNames;
+        public List<CollaboratingCompany> safeCollaboratingCompanies() {
+            return collaboratingCompanies == null ? List.of() : collaboratingCompanies;
         }
 
         public List<String> safeInviteeEmails() {
             return inviteeEmails == null ? List.of() : inviteeEmails;
         }
+    }
+
+    public record CollaboratingCompany(
+            String name,
+            String countryCode
+    ) {
     }
 
     public record Update(

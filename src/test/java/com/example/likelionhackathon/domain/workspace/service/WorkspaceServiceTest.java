@@ -13,6 +13,7 @@ import com.example.likelionhackathon.domain.workspace.entity.WorkspaceEnums.Memb
 import com.example.likelionhackathon.domain.workspace.entity.WorkspaceEnums.WorkspaceRole;
 import com.example.likelionhackathon.domain.workspace.entity.WorkspaceEnums.WorkspaceStatus;
 import com.example.likelionhackathon.domain.workspace.entity.WorkspaceEnums.WorkspaceMemberStatus;
+import com.example.likelionhackathon.domain.workspace.entity.WorkspaceEnums.WorkspaceCompanyRole;
 import com.example.likelionhackathon.domain.workspace.entity.WorkspaceInvitation;
 import com.example.likelionhackathon.domain.workspace.entity.WorkspaceMember;
 import com.example.likelionhackathon.domain.workspace.repository.WorkspaceInvitationRepository;
@@ -86,13 +87,19 @@ class WorkspaceServiceTest {
                 "Global Payment",
                 "RelAI",
                 "kr",
-                List.of("Partner A"),
+                List.of(new WorkspaceRequest.CollaboratingCompany("Partner A", "us")),
                 List.of("partner@example.com")
         );
         when(currentUserProvider.currentPrincipalKey()).thenReturn("1");
         when(workspaceRepository.saveAndFlush(any(Workspace.class))).thenAnswer(invocation -> {
             Workspace workspace = invocation.getArgument(0);
             ReflectionTestUtils.setField(workspace, "id", 10L);
+            AtomicLong companySequence = new AtomicLong(1000L);
+            workspace.getCompanies().forEach(company -> ReflectionTestUtils.setField(
+                    company,
+                    "id",
+                    companySequence.getAndIncrement()
+            ));
             return workspace;
         });
         when(invitationRepository.saveAll(any())).thenAnswer(invocation -> {
@@ -111,8 +118,39 @@ class WorkspaceServiceTest {
         assertThat(response.workspaceId()).isEqualTo(10L);
         assertThat(response.organizationCode()).startsWith("RELAI-KR-");
         assertThat(response.status()).isEqualTo(WorkspaceStatus.ACTIVE);
+        assertThat(response.company().companyId()).isEqualTo(1000L);
+        assertThat(response.company().role()).isEqualTo(WorkspaceCompanyRole.HOST);
+        assertThat(response.collaboratingCompanies())
+                .extracting(
+                        WorkspaceResponse.Company::companyId,
+                        WorkspaceResponse.Company::name,
+                        WorkspaceResponse.Company::countryCode,
+                        WorkspaceResponse.Company::role
+                )
+                .containsExactly(org.assertj.core.groups.Tuple.tuple(
+                        1001L,
+                        "Partner A",
+                        "US",
+                        WorkspaceCompanyRole.PARTNER
+                ));
         verify(memberRepository).save(any(WorkspaceMember.class));
         verify(invitationRepository).saveAll(any());
+    }
+
+    @Test
+    void createWorkspaceRejectsDuplicateCompanyNameAcrossRoles() {
+        WorkspaceRequest.Create request = new WorkspaceRequest.Create(
+                "Global Payment",
+                "RelAI",
+                "KR",
+                List.of(new WorkspaceRequest.CollaboratingCompany(" relai ", "US")),
+                List.of()
+        );
+
+        assertThatThrownBy(() -> workspaceService.create(request))
+                .isInstanceOf(CustomException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.INVALID_WORKSPACE_INPUT);
     }
 
     @Test

@@ -2,6 +2,7 @@ package com.example.likelionhackathon.domain.workspace.dto;
 
 import com.example.likelionhackathon.domain.user.entity.UserEnums.ActivityStatus;
 import com.example.likelionhackathon.domain.workspace.entity.WorkspaceEnums.WorkspaceMemberStatus;
+import com.example.likelionhackathon.domain.workspace.entity.WorkspaceEnums.WorkspaceCompanyRole;
 import com.example.likelionhackathon.domain.workspace.entity.WorkspaceEnums.WorkspaceRole;
 import com.example.likelionhackathon.domain.workspace.entity.WorkspaceEnums.WorkspaceStatus;
 
@@ -16,7 +17,9 @@ public final class WorkspaceResponse {
     public record Created(
             Long workspaceId,
             String organizationCode,
-            WorkspaceStatus status
+            WorkspaceStatus status,
+            Company company,
+            List<Company> collaboratingCompanies
     ) {
     }
 
@@ -35,7 +38,7 @@ public final class WorkspaceResponse {
             String name,
             String organizationCode,
             Company company,
-            List<String> collaboratingCompanies,
+            List<Company> collaboratingCompanies,
             WorkspaceRole myRole,
             long memberCount,
             long projectCount,
@@ -43,7 +46,12 @@ public final class WorkspaceResponse {
     ) {
     }
 
-    public record Company(String name, String countryCode) {
+    public record Company(
+            Long companyId,
+            String name,
+            String countryCode,
+            WorkspaceCompanyRole role
+    ) {
     }
 
     public record Updated(
