@@ -107,6 +107,19 @@ public final class ProjectResponse {
     public record IntegrationsManaged(int processedCount, List<FailedAction> failedActions) {
     }
 
+    public record OAuthStarted(
+            String authorizationUrl,
+            OffsetDateTime expiresAt
+    ) {
+    }
+
+    public record OAuthConnected(
+            Long integrationId,
+            IntegrationProvider provider,
+            IntegrationStatus status
+    ) {
+    }
+
     public record Integration(
             Long integrationId,
             IntegrationProvider provider,

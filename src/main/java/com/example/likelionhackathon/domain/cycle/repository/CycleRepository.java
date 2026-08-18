@@ -20,6 +20,13 @@ public interface CycleRepository extends JpaRepository<Cycle, Long> {
 
     boolean existsByProjectId(Long projectId);
 
+    // 상태를 따라잡을 후보. 아직 시작하지 않은 사이클은 바꿀 게 없어 제외한다.
+    List<Cycle> findByStatusNotAndStartDateLessThanEqual(CycleStatus status, LocalDate date);
+
+    // 미완료 이슈를 넘길 다음 사이클. 마감이 이미 지난 사이클로 넘기면 또 떠돌게 되므로 제외한다.
+    Optional<Cycle> findFirstByProjectIdAndStartDateGreaterThanAndEndDateGreaterThanEqualOrderByStartDateAsc(
+            Long projectId, LocalDate afterStartDate, LocalDate notEndedBefore);
+
     // 기간이 겹치는 사이클이 있는지 확인한다. (기존.시작 <= 신규.마감 && 기존.마감 >= 신규.시작)
     boolean existsByProjectIdAndStartDateLessThanEqualAndEndDateGreaterThanEqual(
             Long projectId,

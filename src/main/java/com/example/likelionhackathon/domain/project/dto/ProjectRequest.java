@@ -78,8 +78,14 @@ public final class ProjectRequest {
     public record IntegrationAction(
             IntegrationActionType type,
             Long integrationId,
-            IntegrationProvider provider,
-            String authorizationCode,
+            List<String> resourceIds,
+            Integer syncIntervalMinutes
+    ) {
+    }
+
+    public record CompleteIntegrationOAuth(
+            String code,
+            String state,
             List<String> resourceIds,
             Integer syncIntervalMinutes
     ) {
