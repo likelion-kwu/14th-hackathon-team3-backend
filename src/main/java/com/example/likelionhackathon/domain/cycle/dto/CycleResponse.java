@@ -10,6 +10,7 @@ import com.example.likelionhackathon.domain.cycle.entity.CycleEnums.AnalysisStat
 import com.example.likelionhackathon.domain.cycle.entity.CycleEnums.CheckNeededType;
 import com.example.likelionhackathon.domain.cycle.entity.CycleEnums.CycleStatus;
 import com.example.likelionhackathon.domain.cycle.entity.CycleEnums.EvidenceSource;
+import com.example.likelionhackathon.domain.cycle.service.CycleIssuePort.IssueProgress;
 import com.example.likelionhackathon.domain.cycle.service.CycleIssuePort.IssueStats;
 import com.fasterxml.jackson.annotation.JsonInclude;
 
@@ -59,9 +60,39 @@ public final class CycleResponse {
             int progressRate,
             int plannedProgressRate,
             IssueSummary summary,
+            List<KeyProgress> keyProgress,
             NextCycle nextCycle,
             LocalDateTime lastAnalyzedAt
     ) {
+    }
+
+    /**
+     * 화면의 '주요 진행 상황' 한 줄. 이슈가 지금 어디까지 왔는지를 그대로 옮긴다.
+     */
+    public record KeyProgress(
+            Long issueId,
+            String title,
+            String status,
+            int progressRate,
+            int checklistDoneCount,
+            int checklistTotalCount,
+            String assigneeName,
+            LocalDate dueDate,
+            LocalDateTime updatedAt
+    ) {
+        public static KeyProgress of(IssueProgress progress) {
+            return new KeyProgress(
+                    progress.issueId(),
+                    progress.title(),
+                    progress.status(),
+                    progress.progressRate(),
+                    progress.checklistDoneCount(),
+                    progress.checklistTotalCount(),
+                    progress.assigneeName(),
+                    progress.dueDate(),
+                    progress.updatedAt()
+            );
+        }
     }
 
     public record IssueSummary(

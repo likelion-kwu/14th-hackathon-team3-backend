@@ -12,6 +12,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -66,6 +67,33 @@ class JpaCycleIssuePortProgressTest {
         assertThat(stats.doneCount()).isEqualTo(1);
         // (1 + 0.5) / 2 = 75%. 완료 개수만 세면 50% 였다.
         assertThat(stats.progressRate()).isEqualTo(75);
+    }
+
+    @Test
+    void recentProgressSkipsCanceledIssuesAndKeepsTheLimit() {
+        Long cycleId = CYCLE_SEQUENCE.incrementAndGet();
+        savedIssue(cycleId, "취소된 업무", IssueStatus.CANCELED, 4, 4);
+        savedIssue(cycleId, "진행 중", IssueStatus.IN_PROGRESS, 12, 7);
+        savedIssue(cycleId, "확인 필요", IssueStatus.NEEDS_REVIEW, 2, 2);
+
+        List<CycleIssuePort.IssueProgress> progress = jpaCycleIssuePort.recentProgressOf(cycleId, 2);
+
+        assertThat(progress).hasSize(2)
+                .extracting(CycleIssuePort.IssueProgress::title)
+                .doesNotContain("취소된 업무");
+    }
+
+    @Test
+    void recentProgressCarriesChecklistCountsFromTheDatabase() {
+        Long cycleId = CYCLE_SEQUENCE.incrementAndGet();
+        savedIssue(cycleId, "보안 취약점 테스트", IssueStatus.IN_PROGRESS, 12, 7);
+
+        CycleIssuePort.IssueProgress progress = jpaCycleIssuePort.recentProgressOf(cycleId, 5).get(0);
+
+        assertThat(progress.checklistDoneCount()).isEqualTo(7);
+        assertThat(progress.checklistTotalCount()).isEqualTo(12);
+        assertThat(progress.progressRate()).isEqualTo(58);
+        assertThat(progress.updatedAt()).isNotNull();
     }
 
     private void savedIssue(Long cycleId, String title, IssueStatus status, int checklistTotal, int checklistDone) {

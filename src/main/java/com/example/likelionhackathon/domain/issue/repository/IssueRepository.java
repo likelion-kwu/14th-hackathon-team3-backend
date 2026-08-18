@@ -2,6 +2,7 @@ package com.example.likelionhackathon.domain.issue.repository;
 
 import com.example.likelionhackathon.domain.issue.entity.Issue;
 import com.example.likelionhackathon.domain.issue.entity.IssueEnums.IssueStatus;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
@@ -17,6 +18,10 @@ public interface IssueRepository extends JpaRepository<Issue, Long>, JpaSpecific
     List<Issue> findByCycleIdAndStatusNotIn(Long cycleId, Collection<IssueStatus> statuses);
 
     List<Issue> findByCycleIdOrderByDueDateAscIdAsc(Long cycleId);
+
+    // 주요 진행 상황. 취소된 이슈를 뺀 최근 변경순이다.
+    List<Issue> findByCycleIdAndStatusNotOrderByUpdatedAtDescIdDesc(
+            Long cycleId, IssueStatus status, Pageable pageable);
 
     @Query("""
             select i.status as status, count(i) as count

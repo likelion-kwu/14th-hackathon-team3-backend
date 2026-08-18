@@ -21,10 +21,14 @@ import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
@@ -210,6 +214,28 @@ class CycleServiceTest {
         assertThat(detail.summary().canceledCount()).isEqualTo(1);
         assertThat(detail.nextCycle().cycleId()).isEqualTo(4L);
         assertThat(detail.lastAnalyzedAt()).isNull();
+    }
+
+    @Test
+    void getDetailPutsRecentIssueProgressOnTheCard() {
+        Cycle cycle = cycle(CYCLE_ID, LocalDate.now().minusDays(10), LocalDate.now().plusDays(4));
+        when(cycleRepository.findById(CYCLE_ID)).thenReturn(Optional.of(cycle));
+        when(cycleIssuePort.statsOf(CYCLE_ID)).thenReturn(new IssueStats(2, 1, 1, 0, 0, 0.58));
+        when(cycleIssuePort.recentProgressOf(eq(CYCLE_ID), anyInt())).thenReturn(List.of(
+                new CycleIssuePort.IssueProgress(
+                        31L, "결제 API v3 연동 개발", "DONE", "홍길동",
+                        LocalDate.now().plusDays(1), 4, 4, LocalDateTime.now()),
+                new CycleIssuePort.IssueProgress(
+                        32L, "보안 취약점 테스트", "IN_PROGRESS", "김철수",
+                        LocalDate.now().plusDays(3), 7, 12, LocalDateTime.now().minusHours(2))));
+
+        CycleResponse.Detail detail = cycleService.getDetail(CYCLE_ID);
+
+        assertThat(detail.keyProgress())
+                .extracting(CycleResponse.KeyProgress::issueId, CycleResponse.KeyProgress::progressRate)
+                .containsExactly(tuple(31L, 100), tuple(32L, 58));
+        assertThat(detail.keyProgress().get(1).checklistDoneCount()).isEqualTo(7);
+        assertThat(detail.keyProgress().get(1).assigneeName()).isEqualTo("김철수");
     }
 
     @Test

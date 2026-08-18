@@ -1,6 +1,7 @@
 package com.example.likelionhackathon.domain.cycle.service;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 
 /**
@@ -26,6 +27,45 @@ public interface CycleIssuePort {
      * 미완료 이슈를 다른 사이클로 옮기고 옮긴 개수를 반환한다.
      */
     int moveUnfinishedIssues(Long fromCycleId, Long toCycleId);
+
+    /**
+     * 사이클 화면의 '주요 진행 상황' 에 올릴 이슈. 최근에 움직인 순서로 준다.
+     *
+     * <p>취소된 이슈는 뺀다. 무엇이 굴러가고 있는지 보는 자리라 취소된 업무는 자리를 차지할 이유가 없다.</p>
+     */
+    List<IssueProgress> recentProgressOf(Long cycleId, int limit);
+
+    /**
+     * 이슈 한 건의 진행 상황. 디자인의 "전체 12개 중 7개 완료 · 58%" 한 줄에 해당한다.
+     */
+    record IssueProgress(
+            Long issueId,
+            String title,
+            String status,
+            String assigneeName,
+            LocalDate dueDate,
+            int checklistDoneCount,
+            int checklistTotalCount,
+            LocalDateTime updatedAt
+    ) {
+        private static final String DONE = "DONE";
+
+        /**
+         * 완료된 이슈는 100, 나머지는 완료 조건을 채운 비율이다.
+         *
+         * <p>사이클 진행률과 같은 규칙으로 내림한다. 반올림하면 11/12 를 채운 이슈가 100% 로 보여
+         * 정말 끝난 이슈와 구분되지 않는다. 완료 조건이 없는 이슈는 완료 전까지 0 이다.</p>
+         */
+        public int progressRate() {
+            if (DONE.equals(status)) {
+                return 100;
+            }
+            if (checklistTotalCount == 0) {
+                return 0;
+            }
+            return Math.min((int) Math.floor(checklistDoneCount * 100.0 / checklistTotalCount), 99);
+        }
+    }
 
     /**
      * AI 분석에 넘길 이슈 한 건. 본문 대신 판단에 필요한 것만 담는다.
