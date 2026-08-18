@@ -63,7 +63,6 @@ public final class ProjectEnums {
     }
 
     public enum IntegrationActionType {
-        CONNECT,
         UPDATE,
         SYNC,
         DISCONNECT

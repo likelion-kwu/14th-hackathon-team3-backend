@@ -13,6 +13,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
+import jakarta.persistence.Lob;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import lombok.AccessLevel;
@@ -55,14 +56,38 @@ public class ProjectIntegration {
 
     private OffsetDateTime lastSyncedAt;
 
+    @Lob
+    private String encryptedAccessToken;
+
+    @Lob
+    private String encryptedRefreshToken;
+
+    private OffsetDateTime tokenExpiresAt;
+
+    @Column(length = 2000)
+    private String grantedScopes;
+
+    @Column(length = 255)
+    private String externalAccountId;
+
     public static ProjectIntegration connect(
             IntegrationProvider provider,
             Collection<String> resourceIds,
-            Integer syncIntervalMinutes
+            Integer syncIntervalMinutes,
+            String encryptedAccessToken,
+            String encryptedRefreshToken,
+            OffsetDateTime tokenExpiresAt,
+            String grantedScopes,
+            String externalAccountId
     ) {
         ProjectIntegration integration = new ProjectIntegration();
         integration.provider = provider;
         integration.status = IntegrationStatus.CONNECTED;
+        integration.encryptedAccessToken = encryptedAccessToken;
+        integration.encryptedRefreshToken = encryptedRefreshToken;
+        integration.tokenExpiresAt = tokenExpiresAt;
+        integration.grantedScopes = grantedScopes;
+        integration.externalAccountId = externalAccountId;
         integration.update(resourceIds, syncIntervalMinutes);
         return integration;
     }

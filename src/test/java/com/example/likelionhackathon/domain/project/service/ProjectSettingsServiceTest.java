@@ -98,27 +98,37 @@ class ProjectSettingsServiceTest {
     }
 
     @Test
-    void connectIntegrationDoesNotPersistAuthorizationCode() {
+    void updateIntegrationChangesResourcesAndInterval() {
         Project project = project();
         when(projectAccessService.findProject(10L)).thenReturn(project);
+        ProjectIntegration integration = ProjectIntegration.connect(
+                IntegrationProvider.SLACK,
+                List.of("general"),
+                30,
+                "encrypted-access-token",
+                null,
+                null,
+                null,
+                null
+        );
+        ReflectionTestUtils.setField(integration, "id", 99L);
+        project.addIntegration(integration);
+        when(integrationRepository.findByIdAndProjectId(99L, 10L))
+                .thenReturn(Optional.of(integration));
 
         ProjectResponse.IntegrationsManaged response = integrationService.manage(
                 10L,
                 new ProjectRequest.ManageIntegrations(List.of(new ProjectRequest.IntegrationAction(
-                        IntegrationActionType.CONNECT,
-                        null,
-                        IntegrationProvider.SLACK,
-                        "one-time-oauth-code",
-                        List.of("general", "handover"),
-                        30
+                        IntegrationActionType.UPDATE,
+                        99L,
+                        List.of("handover"),
+                        60
                 )))
         );
 
         assertThat(response.processedCount()).isEqualTo(1);
-        ArgumentCaptor<ProjectIntegration> captor = ArgumentCaptor.forClass(ProjectIntegration.class);
-        verify(integrationRepository).save(captor.capture());
-        assertThat(captor.getValue().getProvider()).isEqualTo(IntegrationProvider.SLACK);
-        assertThat(captor.getValue().getResourceIds()).containsExactly("general", "handover");
+        assertThat(integration.getResourceIds()).containsExactly("handover");
+        assertThat(integration.getSyncIntervalMinutes()).isEqualTo(60);
     }
 
     @Test
@@ -130,8 +140,6 @@ class ProjectSettingsServiceTest {
                 new ProjectRequest.ManageIntegrations(List.of(new ProjectRequest.IntegrationAction(
                         IntegrationActionType.SYNC,
                         99L,
-                        null,
-                        null,
                         null,
                         null
                 )))
