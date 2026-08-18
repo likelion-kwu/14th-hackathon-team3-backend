@@ -44,7 +44,12 @@ public class CycleController {
         return ApiResponse.success(cycleService.getCycles(projectId, status));
     }
 
-    @Operation(summary = "사이클 생성")
+    @Operation(
+            summary = "사이클 생성",
+            description = """
+                    프로젝트를 만들면 기간을 잘라 사이클이 자동으로 깔리므로 보통은 부르지 않아도 된다.
+                    기존 사이클과 기간이 겹치면 409 로 거절한다.
+                    """)
     @PostMapping("/projects/{projectId}/cycles")
     public ResponseEntity<ApiResponse<CycleResponse.Created>> create(
             @PathVariable Long projectId,
@@ -55,7 +60,16 @@ public class CycleController {
                 .body(ApiResponse.created("리소스 생성이 완료되었습니다.", response));
     }
 
-    @Operation(summary = "사이클 상세 조회")
+    @Operation(
+            summary = "사이클 상세 조회",
+            description = """
+                    사이클 개요 화면 한 장에 필요한 값을 모두 돌려준다.
+
+                    - `progressRate` 는 이슈에서 나온다. 완료된 이슈는 1, 진행 중인 이슈는 완료 조건을 채운 만큼 센다.
+                    - `keyProgress` 는 주요 진행 상황이다. 취소된 이슈를 뺀 최근 변경순 5건이다.
+                    - `summary.delayedCount` 는 마감일이 지나도록 끝나지 않은 이슈 개수다.
+                    - 사이클 상태는 기간을 따라 매일 자동으로 넘어간다. 앞당기려면 상태 변경 API 를 쓴다.
+                    """)
     @GetMapping("/cycles/{cycleId}")
     public ApiResponse<CycleResponse.Detail> getDetail(@PathVariable Long cycleId) {
         return ApiResponse.success(cycleService.getDetail(cycleId));

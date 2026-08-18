@@ -28,6 +28,9 @@ import java.util.List;
 @Transactional(readOnly = true)
 public class CycleService {
 
+    /** 화면의 '주요 진행 상황' 카드가 한 번에 보여주는 줄 수. */
+    private static final int KEY_PROGRESS_SIZE = 5;
+
     private final CycleRepository cycleRepository;
     private final CycleActivityRepository cycleActivityRepository;
     private final CycleAiAnalysisRepository cycleAiAnalysisRepository;
@@ -70,6 +73,11 @@ public class CycleService {
         IssueStats stats = cycleIssuePort.statsOf(cycleId);
         LocalDate today = LocalDate.now();
 
+        List<CycleResponse.KeyProgress> keyProgress = cycleIssuePort.recentProgressOf(cycleId, KEY_PROGRESS_SIZE)
+                .stream()
+                .map(CycleResponse.KeyProgress::of)
+                .toList();
+
         CycleResponse.NextCycle nextCycle = cycleRepository
                 .findFirstByProjectIdAndStartDateGreaterThanOrderByStartDateAsc(
                         cycle.getProjectId(), cycle.getStartDate())
@@ -86,6 +94,7 @@ public class CycleService {
                 stats.progressRate(),
                 cycle.plannedProgressRate(today),
                 CycleResponse.IssueSummary.of(stats),
+                keyProgress,
                 nextCycle,
                 lastAnalyzedAt(cycleId)
         );

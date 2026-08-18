@@ -71,6 +71,39 @@ public class Cycle {
         this.status = next;
     }
 
+    /**
+     * 날짜만 보고 정해지는 상태. 시작 전이면 예정, 기간 안이면 진행 중, 마감이 지났으면 완료다.
+     */
+    public CycleStatus statusOn(LocalDate today) {
+        if (today.isAfter(endDate)) {
+            return CycleStatus.COMPLETED;
+        }
+        if (today.isBefore(startDate)) {
+            return CycleStatus.PLANNED;
+        }
+        return CycleStatus.IN_PROGRESS;
+    }
+
+    /**
+     * 기간이 가리키는 상태까지 따라잡는다.
+     *
+     * <p>사이클을 시작·완료시키는 화면이 디자인에 없어서, 아무도 손대지 않으면 상태가 영원히
+     * 그대로 남는다. 그래서 날짜가 지나면 스스로 다음 상태로 넘어간다.</p>
+     *
+     * <p>뒤로는 돌아가지 않는다. 사람이 {@code PUT /cycles/&#123;cycleId&#125;/status} 로 미리 완료시킨
+     * 사이클을 마감일이 남았다는 이유로 다시 진행 중으로 되돌리면 안 되기 때문이다.</p>
+     *
+     * @return 상태가 바뀌었으면 true
+     */
+    public boolean catchUpTo(LocalDate today) {
+        CycleStatus expected = statusOn(today);
+        if (!expected.isAheadOf(status)) {
+            return false;
+        }
+        this.status = expected;
+        return true;
+    }
+
     public boolean isCompleted() {
         return status == CycleStatus.COMPLETED;
     }
