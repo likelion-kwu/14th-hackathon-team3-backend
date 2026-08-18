@@ -100,6 +100,7 @@ public final class CycleResponse {
             int totalCount,
             int inProgressCount,
             int needsReviewCount,
+            int delayedCount,
             int canceledCount
     ) {
         public static IssueSummary of(IssueStats stats) {
@@ -108,6 +109,7 @@ public final class CycleResponse {
                     stats.totalCount(),
                     stats.inProgressCount(),
                     stats.needsReviewCount(),
+                    stats.delayedCount(),
                     stats.canceledCount()
             );
         }

@@ -200,7 +200,7 @@ class CycleServiceTest {
         Cycle next = cycle(4L, LocalDate.now().plusDays(5), LocalDate.now().plusDays(19));
 
         when(cycleRepository.findById(CYCLE_ID)).thenReturn(Optional.of(cycle));
-        when(cycleIssuePort.statsOf(CYCLE_ID)).thenReturn(new IssueStats(23, 19, 5, 3, 1, 0));
+        when(cycleIssuePort.statsOf(CYCLE_ID)).thenReturn(new IssueStats(23, 19, 5, 3, 2, 1, 0));
         when(cycleRepository.findFirstByProjectIdAndStartDateGreaterThanOrderByStartDateAsc(
                 PROJECT_ID, cycle.getStartDate())).thenReturn(Optional.of(next));
         when(cycleAiAnalysisRepository.findFirstByCycleIdAndStatusOrderByAnalyzedAtDesc(
@@ -212,6 +212,7 @@ class CycleServiceTest {
         assertThat(detail.progressRate()).isEqualTo(82); // 19 / 23 을 내림
         assertThat(detail.summary().doneCount()).isEqualTo(19);
         assertThat(detail.summary().canceledCount()).isEqualTo(1);
+        assertThat(detail.summary().delayedCount()).isEqualTo(2);
         assertThat(detail.nextCycle().cycleId()).isEqualTo(4L);
         assertThat(detail.lastAnalyzedAt()).isNull();
     }
@@ -220,7 +221,7 @@ class CycleServiceTest {
     void getDetailPutsRecentIssueProgressOnTheCard() {
         Cycle cycle = cycle(CYCLE_ID, LocalDate.now().minusDays(10), LocalDate.now().plusDays(4));
         when(cycleRepository.findById(CYCLE_ID)).thenReturn(Optional.of(cycle));
-        when(cycleIssuePort.statsOf(CYCLE_ID)).thenReturn(new IssueStats(2, 1, 1, 0, 0, 0.58));
+        when(cycleIssuePort.statsOf(CYCLE_ID)).thenReturn(new IssueStats(2, 1, 1, 0, 0, 0, 0.58));
         when(cycleIssuePort.recentProgressOf(eq(CYCLE_ID), anyInt())).thenReturn(List.of(
                 new CycleIssuePort.IssueProgress(
                         31L, "결제 API v3 연동 개발", "DONE", "홍길동",
@@ -333,7 +334,7 @@ class CycleServiceTest {
     void getCyclesMapsProgressRateFromIssueStats() {
         Cycle cycle = cycle(CYCLE_ID, LocalDate.of(2026, 7, 29), LocalDate.of(2026, 8, 12));
         when(cycleRepository.findByProjectIdOrderByStartDateAsc(PROJECT_ID)).thenReturn(List.of(cycle));
-        when(cycleIssuePort.statsOf(anyLong())).thenReturn(new IssueStats(4, 3, 1, 0, 0, 0));
+        when(cycleIssuePort.statsOf(anyLong())).thenReturn(new IssueStats(4, 3, 1, 0, 0, 0, 0));
 
         List<CycleResponse.Summary> summaries = cycleService.getCycles(PROJECT_ID, null);
 

@@ -49,6 +49,7 @@ public class JpaCycleIssuePort implements CycleIssuePort {
                 countOf(counts, IssueStatus.DONE),
                 countOf(counts, IssueStatus.IN_PROGRESS),
                 countOf(counts, IssueStatus.NEEDS_REVIEW),
+                countOf(counts, IssueStatus.DELAYED),
                 canceledCount,
                 partialProgressOf(cycleId)
         );

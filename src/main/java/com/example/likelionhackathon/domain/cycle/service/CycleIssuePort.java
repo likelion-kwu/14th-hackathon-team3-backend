@@ -83,6 +83,7 @@ public interface CycleIssuePort {
 
     /**
      * @param totalCount      취소된 이슈를 제외한 전체 개수. 진행률의 분모다.
+     * @param delayedCount    마감일이 지나도록 끝나지 않은 이슈 개수. 진행률 분모에는 그대로 남는다.
      * @param partialProgress 아직 완료되지 않은 이슈들의 완료 조건 달성 비율 합.
      *                        완료 조건 7/12 를 채운 이슈 하나가 0.58 로 잡힌다.
      */
@@ -91,10 +92,11 @@ public interface CycleIssuePort {
             int doneCount,
             int inProgressCount,
             int needsReviewCount,
+            int delayedCount,
             int canceledCount,
             double partialProgress
     ) {
-        public static final IssueStats EMPTY = new IssueStats(0, 0, 0, 0, 0, 0);
+        public static final IssueStats EMPTY = new IssueStats(0, 0, 0, 0, 0, 0, 0);
 
         /**
          * 완료된 이슈는 1, 진행 중인 이슈는 완료 조건을 채운 만큼 센다.

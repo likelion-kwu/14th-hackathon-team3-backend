@@ -96,6 +96,20 @@ class JpaCycleIssuePortProgressTest {
         assertThat(progress.updatedAt()).isNotNull();
     }
 
+    @Test
+    void countsDelayedIssuesSeparatelyButKeepsThemInTheDenominator() {
+        Long cycleId = CYCLE_SEQUENCE.incrementAndGet();
+        savedIssue(cycleId, "지연된 업무", IssueStatus.DELAYED, 4, 2);
+        savedIssue(cycleId, "완료된 업무", IssueStatus.DONE, 4, 4);
+
+        CycleIssuePort.IssueStats stats = jpaCycleIssuePort.statsOf(cycleId);
+
+        assertThat(stats.delayedCount()).isEqualTo(1);
+        assertThat(stats.totalCount()).isEqualTo(2);
+        // 지연됐다고 분모에서 빠지면 남은 일이 없어 보인다. (1 + 0.5) / 2 = 75%
+        assertThat(stats.progressRate()).isEqualTo(75);
+    }
+
     private void savedIssue(Long cycleId, String title, IssueStatus status, int checklistTotal, int checklistDone) {
         Issue issue = Issue.create(
                 cycleId, title, "설명", IssuePriority.HIGH, ASSIGNEE_ID, LocalDate.of(2026, 8, 20));

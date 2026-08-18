@@ -112,6 +112,28 @@ public class Issue {
         this.status = next;
     }
 
+    /**
+     * 마감일이 지났는데 아직 끝나지 않았으면 지연으로 표시한다.
+     *
+     * <p>이슈를 지연으로 바꾸는 화면이 없어서, 아무도 손대지 않으면 마감일이 한참 지나도
+     * 계속 '할 일' 로 남는다. 날짜가 지나면 스스로 넘어간다.</p>
+     *
+     * <p>확인 필요는 건드리지 않는다. 사람의 답을 기다리는 상태라 지연으로 덮으면
+     * 무엇을 기다리는 중이었는지가 사라진다.</p>
+     *
+     * @return 상태가 바뀌었으면 true
+     */
+    public boolean markDelayedIfOverdue(LocalDate today) {
+        if (status != IssueStatus.TODO && status != IssueStatus.IN_PROGRESS) {
+            return false;
+        }
+        if (dueDate == null || !dueDate.isBefore(today)) {
+            return false;
+        }
+        this.status = IssueStatus.DELAYED;
+        return true;
+    }
+
     public void moveToCycle(Long targetCycleId) {
         this.cycleId = targetCycleId;
     }
