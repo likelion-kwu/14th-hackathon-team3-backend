@@ -4,8 +4,10 @@ import com.example.likelionhackathon.domain.project.dto.ProjectRequest;
 import com.example.likelionhackathon.domain.project.dto.ProjectResponse;
 import com.example.likelionhackathon.domain.project.entity.ProjectEnums.ProjectMemberViewStatus;
 import com.example.likelionhackathon.domain.project.entity.ProjectEnums.ProjectStatus;
+import com.example.likelionhackathon.domain.project.entity.ProjectEnums.IntegrationProvider;
 import com.example.likelionhackathon.domain.project.service.ProjectIntegrationService;
 import com.example.likelionhackathon.domain.project.service.ProjectMemberService;
+import com.example.likelionhackathon.domain.project.service.ProjectOAuthService;
 import com.example.likelionhackathon.domain.project.service.ProjectService;
 import com.example.likelionhackathon.domain.project.service.ProjectTeamService;
 import com.example.likelionhackathon.global.common.ApiResponse;
@@ -35,6 +37,7 @@ public class ProjectController {
     private final ProjectMemberService projectMemberService;
     private final ProjectTeamService projectTeamService;
     private final ProjectIntegrationService projectIntegrationService;
+    private final ProjectOAuthService projectOAuthService;
 
     @Operation(summary = "프로젝트 생성")
     @PostMapping("/workspaces/{workspaceId}/projects")
@@ -129,6 +132,31 @@ public class ProjectController {
         return ApiResponse.success(
                 "프로젝트 외부 연동을 관리했습니다.",
                 projectIntegrationService.manage(projectId, request)
+        );
+    }
+
+    @Operation(summary = "프로젝트 외부 연동 OAuth 시작")
+    @PostMapping("/projects/{projectId}/integrations/{provider}/oauth/start")
+    public ApiResponse<ProjectResponse.OAuthStarted> startIntegrationOAuth(
+            @PathVariable Long projectId,
+            @PathVariable IntegrationProvider provider
+    ) {
+        return ApiResponse.success(
+                "외부 연동 인증 URL을 생성했습니다.",
+                projectOAuthService.start(projectId, provider)
+        );
+    }
+
+    @Operation(summary = "프로젝트 외부 연동 OAuth 완료")
+    @PostMapping("/projects/{projectId}/integrations/{provider}/oauth/complete")
+    public ApiResponse<ProjectResponse.OAuthConnected> completeIntegrationOAuth(
+            @PathVariable Long projectId,
+            @PathVariable IntegrationProvider provider,
+            @RequestBody ProjectRequest.CompleteIntegrationOAuth request
+    ) {
+        return ApiResponse.success(
+                "외부 서비스를 연결했습니다.",
+                projectOAuthService.complete(projectId, provider, request)
         );
     }
 }
