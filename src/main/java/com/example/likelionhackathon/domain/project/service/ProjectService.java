@@ -1,5 +1,6 @@
 package com.example.likelionhackathon.domain.project.service;
 
+import com.example.likelionhackathon.domain.cycle.service.ProjectCycleCreator;
 import com.example.likelionhackathon.domain.project.dto.ProjectRequest;
 import com.example.likelionhackathon.domain.project.dto.ProjectResponse;
 import com.example.likelionhackathon.domain.project.entity.Project;
@@ -45,6 +46,7 @@ public class ProjectService {
     private final WorkspaceMemberRepository workspaceMemberRepository;
     private final CurrentUserProvider currentUserProvider;
     private final ProjectAccessService projectAccessService;
+    private final ProjectCycleCreator projectCycleCreator;
 
     @Transactional
     public ProjectResponse.Created create(Long workspaceId, ProjectRequest.Create request) {
@@ -90,12 +92,19 @@ public class ProjectService {
                 defaultTeam
         ));
 
+        Project saved;
         try {
-            Project saved = projectRepository.saveAndFlush(project);
-            return new ProjectResponse.Created(saved.getId(), saved.getStatus());
+            saved = projectRepository.saveAndFlush(project);
         } catch (DataIntegrityViolationException e) {
             throw new CustomException(ErrorCode.PROJECT_NAME_DUPLICATED);
         }
+
+        // 사이클이 없으면 이슈를 만들 수 없어서 프로젝트 기간을 잘라 사이클을 함께 만든다.
+        // 같은 트랜잭션이라 사이클 저장이 실패하면 프로젝트도 남지 않는다.
+        projectCycleCreator.createInitialCycles(
+                saved.getId(), saved.getStartDate(), saved.getEndDate(), saved.getObjective());
+
+        return new ProjectResponse.Created(saved.getId(), saved.getStatus());
     }
 
     @Transactional(readOnly = true)

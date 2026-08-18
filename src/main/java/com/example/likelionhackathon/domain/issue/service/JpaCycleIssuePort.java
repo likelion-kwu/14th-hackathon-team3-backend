@@ -4,7 +4,9 @@ import com.example.likelionhackathon.domain.cycle.service.CycleIssuePort;
 import com.example.likelionhackathon.domain.issue.entity.Issue;
 import com.example.likelionhackathon.domain.issue.entity.IssueEnums.IssueStatus;
 import com.example.likelionhackathon.domain.issue.repository.IssueRepository;
+import com.example.likelionhackathon.domain.issue.service.IssueMemberPort.MemberProfile;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -31,6 +33,7 @@ public class JpaCycleIssuePort implements CycleIssuePort {
             List.of(IssueStatus.DONE, IssueStatus.CANCELED);
 
     private final IssueRepository issueRepository;
+    private final IssueMemberPort issueMemberPort;
 
     @Override
     public IssueStats statsOf(Long cycleId) {
@@ -46,6 +49,7 @@ public class JpaCycleIssuePort implements CycleIssuePort {
                 countOf(counts, IssueStatus.DONE),
                 countOf(counts, IssueStatus.IN_PROGRESS),
                 countOf(counts, IssueStatus.NEEDS_REVIEW),
+                countOf(counts, IssueStatus.DELAYED),
                 canceledCount,
                 partialProgressOf(cycleId)
         );
@@ -88,6 +92,31 @@ public class JpaCycleIssuePort implements CycleIssuePort {
         List<Issue> unfinished = issueRepository.findByCycleIdAndStatusNotIn(fromCycleId, UNFINISHED_EXCLUDED);
         unfinished.forEach(issue -> issue.moveToCycle(toCycleId));
         return unfinished.size();
+    }
+
+    @Override
+    public List<IssueProgress> recentProgressOf(Long cycleId, int limit) {
+        return issueRepository
+                .findByCycleIdAndStatusNotOrderByUpdatedAtDescIdDesc(
+                        cycleId, IssueStatus.CANCELED, PageRequest.of(0, limit))
+                .stream()
+                .map(issue -> new IssueProgress(
+                        issue.getId(),
+                        issue.getTitle(),
+                        issue.getStatus().name(),
+                        assigneeName(issue.getAssigneeId()),
+                        issue.getDueDate(),
+                        issue.checklistDoneCount(),
+                        issue.checklistTotalCount(),
+                        issue.getUpdatedAt()
+                ))
+                .toList();
+    }
+
+    private String assigneeName(Long assigneeId) {
+        return issueMemberPort.findProfile(assigneeId)
+                .map(MemberProfile::name)
+                .orElse(null);
     }
 
     private int countOf(Map<IssueStatus, Long> counts, IssueStatus status) {
