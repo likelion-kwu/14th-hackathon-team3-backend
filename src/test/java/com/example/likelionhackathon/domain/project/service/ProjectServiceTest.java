@@ -21,6 +21,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.LocalDate;
@@ -31,6 +32,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -48,6 +50,8 @@ class ProjectServiceTest {
     private CurrentUserProvider currentUserProvider;
     @Mock
     private ProjectAccessService projectAccessService;
+    @Mock
+    private ProjectCycleCreator projectCycleCreator;
 
     private ProjectService projectService;
 
@@ -59,7 +63,8 @@ class ProjectServiceTest {
                 workspaceRepository,
                 workspaceMemberRepository,
                 currentUserProvider,
-                projectAccessService
+                projectAccessService,
+                projectCycleCreator
         );
     }
 
@@ -90,6 +95,48 @@ class ProjectServiceTest {
         assertThat(captor.getValue().getMembers()).singleElement()
                 .extracting("name", "role")
                 .containsExactly("Owner", com.example.likelionhackathon.domain.project.entity.ProjectEnums.ProjectMemberRole.PROJECT_ADMIN);
+    }
+
+    @Test
+    void createAlsoCreatesInitialCyclesCoveringProjectPeriod() {
+        Workspace workspace = workspace();
+        WorkspaceMember owner = member(workspace, WorkspaceRole.OWNER);
+        when(workspaceRepository.findById(1L)).thenReturn(Optional.of(workspace));
+        when(currentUserProvider.currentPrincipalKey()).thenReturn("owner@example.com");
+        when(workspaceMemberRepository.findByWorkspaceIdAndPrincipalKey(1L, "owner@example.com"))
+                .thenReturn(Optional.of(owner));
+        when(projectRepository.saveAndFlush(any(Project.class))).thenAnswer(invocation -> {
+            Project project = invocation.getArgument(0);
+            ReflectionTestUtils.setField(project, "id", 10L);
+            ReflectionTestUtils.setField(project, "version", 0L);
+            return project;
+        });
+
+        projectService.create(1L, createRequest());
+
+        verify(projectCycleCreator).createInitialCycles(
+                10L,
+                LocalDate.of(2026, 8, 1),
+                LocalDate.of(2026, 8, 31),
+                "Integrate global payment systems");
+    }
+
+    @Test
+    void createDoesNotCreateCyclesWhenProjectSaveFails() {
+        Workspace workspace = workspace();
+        WorkspaceMember owner = member(workspace, WorkspaceRole.OWNER);
+        when(workspaceRepository.findById(1L)).thenReturn(Optional.of(workspace));
+        when(currentUserProvider.currentPrincipalKey()).thenReturn("owner@example.com");
+        when(workspaceMemberRepository.findByWorkspaceIdAndPrincipalKey(1L, "owner@example.com"))
+                .thenReturn(Optional.of(owner));
+        when(projectRepository.saveAndFlush(any(Project.class)))
+                .thenThrow(new DataIntegrityViolationException("duplicated"));
+
+        assertThatThrownBy(() -> projectService.create(1L, createRequest()))
+                .isInstanceOf(CustomException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.PROJECT_NAME_DUPLICATED);
+        verifyNoInteractions(projectCycleCreator);
     }
 
     @Test

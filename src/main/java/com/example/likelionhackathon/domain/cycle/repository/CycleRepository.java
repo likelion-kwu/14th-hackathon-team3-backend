@@ -20,6 +20,9 @@ public interface CycleRepository extends JpaRepository<Cycle, Long> {
 
     boolean existsByProjectId(Long projectId);
 
+    // 상태를 따라잡을 후보. 아직 시작하지 않은 사이클은 바꿀 게 없어 제외한다.
+    List<Cycle> findByStatusNotAndStartDateLessThanEqual(CycleStatus status, LocalDate date);
+
     // 기간이 겹치는 사이클이 있는지 확인한다. (기존.시작 <= 신규.마감 && 기존.마감 >= 신규.시작)
     boolean existsByProjectIdAndStartDateLessThanEqualAndEndDateGreaterThanEqual(
             Long projectId,

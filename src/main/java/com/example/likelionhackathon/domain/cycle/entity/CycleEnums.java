@@ -8,6 +8,11 @@ public final class CycleEnums {
     public enum CycleStatus {
         PLANNED, IN_PROGRESS, COMPLETED;
 
+        /** 선언 순서(PLANNED → IN_PROGRESS → COMPLETED)가 곧 진행 순서다. */
+        public boolean isAheadOf(CycleStatus other) {
+            return ordinal() > other.ordinal();
+        }
+
         // PLANNED → IN_PROGRESS → COMPLETED 순서만 허용한다.
         public boolean canTransitionTo(CycleStatus next) {
             return switch (this) {
