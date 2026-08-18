@@ -36,7 +36,13 @@ public class ProjectController {
     private final ProjectTeamService projectTeamService;
     private final ProjectIntegrationService projectIntegrationService;
 
-    @Operation(summary = "프로젝트 생성")
+    @Operation(
+            summary = "프로젝트 생성",
+            description = """
+                    프로젝트 기간을 잘라 사이클(`Cycle 1`, `Cycle 2` …)을 함께 만든다. 사이클 없이는 이슈를 만들 수 없어서다.
+                    기본 2주 단위이고 마지막 자투리가 7일 미만이면 직전 사이클에 붙인다.
+                    만들어진 사이클은 사이클 목록 조회로 확인한다.
+                    """)
     @PostMapping("/workspaces/{workspaceId}/projects")
     public ResponseEntity<ApiResponse<ProjectResponse.Created>> create(
             @PathVariable Long workspaceId,

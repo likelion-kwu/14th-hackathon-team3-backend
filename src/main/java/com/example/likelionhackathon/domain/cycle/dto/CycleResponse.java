@@ -13,6 +13,7 @@ import com.example.likelionhackathon.domain.cycle.entity.CycleEnums.EvidenceSour
 import com.example.likelionhackathon.domain.cycle.service.CycleIssuePort.IssueProgress;
 import com.example.likelionhackathon.domain.cycle.service.CycleIssuePort.IssueStats;
 import com.fasterxml.jackson.annotation.JsonInclude;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -60,6 +61,7 @@ public final class CycleResponse {
             int progressRate,
             int plannedProgressRate,
             IssueSummary summary,
+            @Schema(description = "주요 진행 상황. 취소된 이슈를 뺀 최근 변경순 5건이다.")
             List<KeyProgress> keyProgress,
             NextCycle nextCycle,
             LocalDateTime lastAnalyzedAt
@@ -69,15 +71,27 @@ public final class CycleResponse {
     /**
      * 화면의 '주요 진행 상황' 한 줄. 이슈가 지금 어디까지 왔는지를 그대로 옮긴다.
      */
+    @Schema(description = "주요 진행 상황 한 줄")
     public record KeyProgress(
+            @Schema(description = "이슈 식별자", example = "31")
             Long issueId,
+            @Schema(description = "이슈 제목", example = "결제 API v3 연동 개발")
             String title,
+            @Schema(description = "이슈 상태", example = "IN_PROGRESS",
+                    allowableValues = {"TODO", "IN_PROGRESS", "NEEDS_REVIEW", "DELAYED", "DONE"})
             String status,
+            @Schema(description = "이슈 진행률. 완료 조건을 채운 비율이다. 완료된 이슈만 100 이고, "
+                    + "완료 조건을 다 채웠어도 이슈를 닫기 전에는 99 다.", example = "58")
             int progressRate,
+            @Schema(description = "달성한 완료 조건 개수", example = "7")
             int checklistDoneCount,
+            @Schema(description = "전체 완료 조건 개수", example = "12")
             int checklistTotalCount,
+            @Schema(description = "담당자 이름. 프로젝트 멤버에서 찾지 못하면 null 이다.", example = "김호균")
             String assigneeName,
+            @Schema(description = "이슈 처리 일자")
             LocalDate dueDate,
+            @Schema(description = "이슈가 마지막으로 바뀐 시각. 이 순서로 정렬한다.")
             LocalDateTime updatedAt
     ) {
         public static KeyProgress of(IssueProgress progress) {
@@ -95,12 +109,20 @@ public final class CycleResponse {
         }
     }
 
+    @Schema(description = "사이클 이슈 집계")
     public record IssueSummary(
+            @Schema(description = "완료된 이슈 개수", example = "19")
             int doneCount,
+            @Schema(description = "취소된 이슈를 뺀 전체 개수. 진행률의 분모다.", example = "23")
             int totalCount,
+            @Schema(description = "진행 중인 이슈 개수", example = "5")
             int inProgressCount,
+            @Schema(description = "확인이 필요한 이슈 개수", example = "3")
             int needsReviewCount,
+            @Schema(description = "마감일이 지나도록 끝나지 않은 이슈 개수. 매일 자동으로 갱신되며 "
+                    + "아직 남은 일이라 진행률 분모에는 그대로 남는다.", example = "2")
             int delayedCount,
+            @Schema(description = "취소된 이슈 개수", example = "1")
             int canceledCount
     ) {
         public static IssueSummary of(IssueStats stats) {
