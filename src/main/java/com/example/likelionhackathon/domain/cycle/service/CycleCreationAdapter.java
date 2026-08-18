@@ -2,7 +2,6 @@ package com.example.likelionhackathon.domain.cycle.service;
 
 import com.example.likelionhackathon.domain.cycle.entity.Cycle;
 import com.example.likelionhackathon.domain.cycle.repository.CycleRepository;
-import com.example.likelionhackathon.domain.project.service.ProjectCycleCreator;
 import com.example.likelionhackathon.global.config.CycleProperties;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
