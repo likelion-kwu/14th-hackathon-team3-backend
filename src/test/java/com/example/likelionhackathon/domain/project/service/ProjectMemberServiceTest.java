@@ -4,24 +4,24 @@ import com.example.likelionhackathon.domain.project.dto.ProjectRequest;
 import com.example.likelionhackathon.domain.project.dto.ProjectResponse;
 import com.example.likelionhackathon.domain.project.entity.Project;
 import com.example.likelionhackathon.domain.project.entity.ProjectCompany;
-import com.example.likelionhackathon.domain.project.entity.ProjectEnums.AccessScope;
 import com.example.likelionhackathon.domain.project.entity.ProjectEnums.ParticipatingCompanyRole;
 import com.example.likelionhackathon.domain.project.entity.ProjectEnums.ProjectMemberActionType;
 import com.example.likelionhackathon.domain.project.entity.ProjectEnums.ProjectMemberRole;
 import com.example.likelionhackathon.domain.project.entity.ProjectEnums.ProjectMemberStatus;
-import com.example.likelionhackathon.domain.project.entity.ProjectInvitation;
 import com.example.likelionhackathon.domain.project.entity.ProjectMember;
 import com.example.likelionhackathon.domain.project.entity.ProjectTeam;
-import com.example.likelionhackathon.domain.project.repository.ProjectInvitationRepository;
 import com.example.likelionhackathon.domain.project.repository.ProjectMemberRepository;
 import com.example.likelionhackathon.domain.project.repository.ProjectTeamRepository;
 import com.example.likelionhackathon.domain.workspace.entity.Workspace;
+import com.example.likelionhackathon.domain.workspace.entity.WorkspaceEnums.WorkspaceRole;
+import com.example.likelionhackathon.domain.workspace.entity.WorkspaceMember;
+import com.example.likelionhackathon.domain.workspace.repository.WorkspaceMemberRepository;
 import com.example.likelionhackathon.global.error.ErrorCode;
 import com.example.likelionhackathon.global.error.exception.CustomException;
+import com.example.likelionhackathon.global.security.CurrentUserProvider;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -32,7 +32,6 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -44,9 +43,11 @@ class ProjectMemberServiceTest {
     @Mock
     private ProjectMemberRepository memberRepository;
     @Mock
-    private ProjectInvitationRepository invitationRepository;
-    @Mock
     private ProjectTeamRepository teamRepository;
+    @Mock
+    private WorkspaceMemberRepository workspaceMemberRepository;
+    @Mock
+    private CurrentUserProvider currentUserProvider;
 
     private ProjectMemberService memberService;
 
@@ -55,55 +56,56 @@ class ProjectMemberServiceTest {
         memberService = new ProjectMemberService(
                 projectAccessService,
                 memberRepository,
-                invitationRepository,
-                teamRepository
+                teamRepository,
+                workspaceMemberRepository,
+                currentUserProvider
         );
     }
 
     @Test
-    void inviteAddsPendingInvitation() {
+    void joinAddsCurrentWorkspaceMemberAsProjectAdmin() {
         Fixture fixture = fixture();
         when(projectAccessService.findProject(10L)).thenReturn(fixture.project());
-        when(teamRepository.findByIdAndProjectId(20L, 10L)).thenReturn(Optional.of(fixture.team()));
-
-        ProjectResponse.MembersManaged response = memberService.manageMembers(
-                10L,
-                new ProjectRequest.ManageMembers(List.of(new ProjectRequest.MemberAction(
-                        ProjectMemberActionType.INVITE,
-                        null,
-                        "Emily@Example.com",
-                        20L,
-                        null,
-                        null
-                )))
+        when(currentUserProvider.currentPrincipalKey()).thenReturn("member@example.com");
+        WorkspaceMember workspaceMember = WorkspaceMember.createInvitedMember(
+                fixture.project().getWorkspace(),
+                "member@example.com",
+                "Member",
+                "member@example.com",
+                "RelAI",
+                "General",
+                null,
+                WorkspaceRole.MEMBER
         );
+        ReflectionTestUtils.setField(workspaceMember, "id", 40L);
+        when(workspaceMemberRepository.findByWorkspaceIdAndPrincipalKey(1L, "member@example.com"))
+                .thenReturn(Optional.of(workspaceMember));
+        when(memberRepository.save(org.mockito.ArgumentMatchers.any(ProjectMember.class)))
+                .thenAnswer(invocation -> {
+                    ProjectMember member = invocation.getArgument(0);
+                    ReflectionTestUtils.setField(member, "id", 50L);
+                    return member;
+                });
 
-        assertThat(response.processedCount()).isEqualTo(1);
-        ArgumentCaptor<ProjectInvitation> captor = ArgumentCaptor.forClass(ProjectInvitation.class);
-        verify(invitationRepository).save(captor.capture());
-        assertThat(captor.getValue().getEmail()).isEqualTo("emily@example.com");
-        assertThat(captor.getValue().getRole()).isEqualTo(ProjectMemberRole.MEMBER);
-        assertThat(captor.getValue().getAccessScope()).isEqualTo(AccessScope.TEAM_ONLY);
+        ProjectResponse.Joined response = memberService.join(10L);
+
+        assertThat(response.projectId()).isEqualTo(10L);
+        assertThat(response.memberId()).isEqualTo(50L);
+        assertThat(response.role()).isEqualTo(ProjectMemberRole.PROJECT_ADMIN);
+        verify(memberRepository).save(org.mockito.ArgumentMatchers.any(ProjectMember.class));
     }
 
     @Test
-    void manageRejectsInvalidInviteEmail() {
+    void joinRejectsExistingProjectMember() {
         when(projectAccessService.findProject(10L)).thenReturn(fixture().project());
+        when(currentUserProvider.currentPrincipalKey()).thenReturn("owner@example.com");
+        when(memberRepository.findByProjectIdAndPrincipalKey(10L, "owner@example.com"))
+                .thenReturn(Optional.of(fixture().admin()));
 
-        assertThatThrownBy(() -> memberService.manageMembers(
-                10L,
-                new ProjectRequest.ManageMembers(List.of(new ProjectRequest.MemberAction(
-                        ProjectMemberActionType.INVITE,
-                        null,
-                        "invalid-email",
-                        20L,
-                        null,
-                        null
-                )))
-        ))
+        assertThatThrownBy(() -> memberService.join(10L))
                 .isInstanceOf(CustomException.class)
                 .extracting("errorCode")
-                .isEqualTo(ErrorCode.INVALID_MEMBER_ACTION);
+                .isEqualTo(ErrorCode.ALREADY_PROJECT_MEMBER);
     }
 
     @Test
@@ -124,7 +126,6 @@ class ProjectMemberServiceTest {
                         30L,
                         null,
                         null,
-                        null,
                         null
                 )))
         ))
@@ -137,6 +138,7 @@ class ProjectMemberServiceTest {
         Workspace workspace = Workspace.create(
                 "Workspace", "RELAI-KR-ABC123", "RelAI", "KR", List.of()
         );
+        ReflectionTestUtils.setField(workspace, "id", 1L);
         Project project = Project.create(
                 workspace,
                 "Project",

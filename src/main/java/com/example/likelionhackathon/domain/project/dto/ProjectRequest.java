@@ -50,7 +50,6 @@ public final class ProjectRequest {
     public record MemberAction(
             ProjectMemberActionType type,
             Long memberId,
-            String email,
             Long teamId,
             ProjectMemberRole role,
             AccessScope accessScope
