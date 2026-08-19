@@ -79,21 +79,20 @@ public class ProjectService {
         );
         companies.forEach(project::addCompany);
 
-        CountryDefaults defaults = countryDefaults(workspace.getCompanyCountryCode());
-        ProjectTeam defaultTeam = ProjectTeam.createDefault(
-                host.companyId(),
-                defaults.countryCode(),
-                defaults.timezone(),
-                defaults.languageCode()
+        List<ProjectTeam> defaultTeams = createDefaultTeams(
+                project, companies, workspace.getCompanyCountryCode()
         );
-        project.addTeam(defaultTeam);
+        ProjectTeam hostDefaultTeam = defaultTeams.stream()
+                .filter(team -> team.getCompanyId().equals(host.companyId()))
+                .findFirst()
+                .orElseThrow(() -> new CustomException(ErrorCode.INVALID_PROJECT_INPUT));
         project.addMember(ProjectMember.createAdmin(
                 creator.getId(),
                 creator.getPrincipalKey(),
                 creator.getName(),
                 host.companyId(),
                 companyName(companies, host.companyId()),
-                defaultTeam
+                hostDefaultTeam
         ));
 
         Project saved;
@@ -351,6 +350,26 @@ public class ProjectService {
                 .map(ProjectCompany::getName)
                 .findFirst()
                 .orElseThrow(() -> new CustomException(ErrorCode.INVALID_PROJECT_INPUT));
+    }
+
+    private List<ProjectTeam> createDefaultTeams(
+            Project project,
+            List<ProjectCompany> companies,
+            String countryCode
+    ) {
+        CountryDefaults defaults = countryDefaults(countryCode);
+        return companies.stream()
+                .map(company -> {
+                    ProjectTeam team = ProjectTeam.createDefault(
+                            company.getCompanyId(),
+                            defaults.countryCode(),
+                            defaults.timezone(),
+                            defaults.languageCode()
+                    );
+                    project.addTeam(team);
+                    return team;
+                })
+                .toList();
     }
 
     private CountryDefaults countryDefaults(String countryCode) {

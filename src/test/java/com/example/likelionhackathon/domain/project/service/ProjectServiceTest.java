@@ -97,9 +97,12 @@ class ProjectServiceTest {
         assertThat(response.status()).isEqualTo(ProjectStatus.DRAFT);
         ArgumentCaptor<Project> captor = ArgumentCaptor.forClass(Project.class);
         verify(projectRepository).saveAndFlush(captor.capture());
-        assertThat(captor.getValue().getTeams()).singleElement()
-                .extracting("teamName", "timezone")
-                .containsExactly("General", "Asia/Seoul");
+        assertThat(captor.getValue().getTeams())
+                .extracting(ProjectTeam::getCompanyId, ProjectTeam::getTeamName, ProjectTeam::getTimezone)
+                .containsExactlyInAnyOrder(
+                        org.assertj.core.groups.Tuple.tuple(1L, "General", "Asia/Seoul"),
+                        org.assertj.core.groups.Tuple.tuple(2L, "General", "Asia/Seoul")
+                );
         assertThat(captor.getValue().getMembers()).singleElement()
                 .extracting("name", "role")
                 .containsExactly("Owner", com.example.likelionhackathon.domain.project.entity.ProjectEnums.ProjectMemberRole.PROJECT_ADMIN);

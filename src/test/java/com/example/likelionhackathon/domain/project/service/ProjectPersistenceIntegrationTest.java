@@ -91,9 +91,9 @@ class ProjectPersistenceIntegrationTest {
         WorkspaceResponse.Detail workspaceDetail = workspaceService.getDetail(workspace.getId());
 
         assertThat(detail.participatingCompanies()).hasSize(2);
-        assertThat(detail.teamSchedules()).singleElement()
+        assertThat(detail.teamSchedules())
                 .extracting("teamName")
-                .isEqualTo("General");
+                .containsExactly("General", "General");
         assertThat(detail.members()).singleElement()
                 .extracting("name")
                 .isEqualTo("Project Owner");
