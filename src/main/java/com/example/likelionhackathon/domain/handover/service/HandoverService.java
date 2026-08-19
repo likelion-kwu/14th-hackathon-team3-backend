@@ -8,6 +8,7 @@ import com.example.likelionhackathon.domain.handover.entity.HandoverEvidence;
 import com.example.likelionhackathon.domain.handover.entity.HandoverItem;
 import com.example.likelionhackathon.domain.handover.entity.HandoverEnums.GenerationStatus;
 import com.example.likelionhackathon.domain.handover.entity.HandoverEnums.HandoverStatus;
+import com.example.likelionhackathon.domain.handover.entity.HandoverEnums.Provider;
 import com.example.likelionhackathon.domain.handover.entity.HandoverEnums.ReviewStatus;
 import com.example.likelionhackathon.domain.handover.repository.CollaborationActivityRepository;
 import com.example.likelionhackathon.domain.handover.repository.HandoverRepository;
@@ -52,13 +53,14 @@ public class HandoverService {
             throw new CustomException(ErrorCode.HANDOVER_ALREADY_GENERATING);
         }
 
+        Set<Provider> sourceTypes = sourceTypesOrAll(request.sourceTypes());
         boolean hasActivities = activityRepository
                 .existsByProjectIdAndCycleIdAndOccurredAtBetweenAndProviderIn(
                         projectId,
                         cycleId,
                         request.sourceRange().from(),
                         request.sourceRange().to(),
-                        request.sourceTypes()
+                        sourceTypes
                 );
         if (!hasActivities) {
             throw new CustomException(ErrorCode.NO_CONNECTED_SOURCE);
@@ -69,7 +71,7 @@ public class HandoverService {
                 cycleId,
                 request.sourceRange().from(),
                 request.sourceRange().to(),
-                request.sourceTypes()
+                sourceTypes
         );
         Handover saved = handoverRepository.save(handover);
         generationService.generate(saved.getId(), false);
@@ -91,10 +93,9 @@ public class HandoverService {
             throw new CustomException(ErrorCode.REFRESH_ALREADY_RUNNING);
         }
 
-        Set<com.example.likelionhackathon.domain.handover.entity.HandoverEnums.Provider> providers =
-                request != null && request.sourceTypes() != null && !request.sourceTypes().isEmpty()
-                        ? request.sourceTypes()
-                        : handover.getSourceTypes();
+        Set<Provider> providers = request != null
+                ? sourceTypesOrDefault(request.sourceTypes(), handover.getSourceTypes())
+                : sourceTypesOrAll(handover.getSourceTypes());
 
         boolean hasActivities = activityRepository
                 .existsByProjectIdAndCycleIdAndOccurredAtBetweenAndProviderIn(
@@ -113,6 +114,22 @@ public class HandoverService {
         boolean preserveManualEdits = request == null || request.shouldPreserveManualEdits();
         generationService.generate(saved.getId(), preserveManualEdits);
         return toGenerationJob(saved);
+    }
+
+    private Set<Provider> sourceTypesOrAll(Set<Provider> sourceTypes) {
+        return sourceTypes == null || sourceTypes.isEmpty()
+                ? Set.of(Provider.values())
+                : sourceTypes;
+    }
+
+    private Set<Provider> sourceTypesOrDefault(
+            Set<Provider> requestedSourceTypes,
+            Set<Provider> previousSourceTypes
+    ) {
+        if (requestedSourceTypes != null && !requestedSourceTypes.isEmpty()) {
+            return requestedSourceTypes;
+        }
+        return sourceTypesOrAll(previousSourceTypes);
     }
 
     @Transactional

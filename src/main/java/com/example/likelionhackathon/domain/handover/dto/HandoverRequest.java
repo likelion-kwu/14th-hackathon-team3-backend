@@ -6,7 +6,6 @@ import com.example.likelionhackathon.domain.handover.entity.HandoverEnums.Review
 import com.example.likelionhackathon.domain.handover.entity.HandoverEnums.TimingType;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
@@ -22,7 +21,7 @@ public final class HandoverRequest {
 
     public record GenerateDraft(
             @NotNull @Valid SourceRange sourceRange,
-            @NotEmpty Set<Provider> sourceTypes
+            Set<Provider> sourceTypes
     ) {
     }
 
