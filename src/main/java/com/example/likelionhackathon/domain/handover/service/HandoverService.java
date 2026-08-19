@@ -10,7 +10,6 @@ import com.example.likelionhackathon.domain.handover.entity.HandoverEnums.Genera
 import com.example.likelionhackathon.domain.handover.entity.HandoverEnums.HandoverStatus;
 import com.example.likelionhackathon.domain.handover.entity.HandoverEnums.Provider;
 import com.example.likelionhackathon.domain.handover.entity.HandoverEnums.ReviewStatus;
-import com.example.likelionhackathon.domain.handover.repository.CollaborationActivityRepository;
 import com.example.likelionhackathon.domain.handover.repository.HandoverRepository;
 import com.example.likelionhackathon.global.error.ErrorCode;
 import com.example.likelionhackathon.global.error.exception.CustomException;
@@ -39,7 +38,6 @@ public class HandoverService {
     private static final Set<HandoverStatus> GENERATING_STATUSES = Set.of(HandoverStatus.AI_GENERATING);
 
     private final HandoverRepository handoverRepository;
-    private final CollaborationActivityRepository activityRepository;
     private final HandoverGenerationService generationService;
 
     public HandoverResponse.GenerationJob generateDraft(
@@ -54,18 +52,6 @@ public class HandoverService {
         }
 
         Set<Provider> sourceTypes = sourceTypesOrAll(request.sourceTypes());
-        boolean hasActivities = activityRepository
-                .existsByProjectIdAndCycleIdAndOccurredAtBetweenAndProviderIn(
-                        projectId,
-                        cycleId,
-                        request.sourceRange().from(),
-                        request.sourceRange().to(),
-                        sourceTypes
-                );
-        if (!hasActivities) {
-            throw new CustomException(ErrorCode.NO_CONNECTED_SOURCE);
-        }
-
         Handover handover = Handover.startGeneration(
                 projectId,
                 cycleId,
@@ -96,18 +82,6 @@ public class HandoverService {
         Set<Provider> providers = request != null
                 ? sourceTypesOrDefault(request.sourceTypes(), handover.getSourceTypes())
                 : sourceTypesOrAll(handover.getSourceTypes());
-
-        boolean hasActivities = activityRepository
-                .existsByProjectIdAndCycleIdAndOccurredAtBetweenAndProviderIn(
-                        handover.getProjectId(),
-                        handover.getCycleId(),
-                        handover.getSourceFrom(),
-                        handover.getSourceTo(),
-                        providers
-                );
-        if (!hasActivities) {
-            throw new CustomException(ErrorCode.SOURCE_SYNC_FAILED);
-        }
 
         handover.startRefresh(providers);
         Handover saved = handoverRepository.save(handover);

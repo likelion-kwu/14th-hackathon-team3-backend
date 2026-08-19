@@ -49,7 +49,9 @@ public class HandoverGenerationService {
                     );
 
             if (activities.isEmpty()) {
-                handover.failGeneration();
+                // 외부 서비스 연동을 사용하지 않는 프로젝트는 빈 초안을 열어 사용자가 직접 작성한다.
+                // 새 인수인계는 빈 목록으로 완료되고, 재반영은 기존 초안을 유지한다.
+                handover.completeGeneration(List.copyOf(handover.getItems()), OffsetDateTime.now());
                 return;
             }
 
