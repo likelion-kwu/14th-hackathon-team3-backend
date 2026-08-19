@@ -101,6 +101,14 @@ public final class ProjectResponse {
     public record MembersManaged(int processedCount, List<FailedAction> failedActions) {
     }
 
+    public record Joined(
+            Long projectId,
+            Long memberId,
+            ProjectMemberRole role,
+            AccessScope accessScope
+    ) {
+    }
+
     public record TeamSettingsSaved(int updatedTeamCount) {
     }
 

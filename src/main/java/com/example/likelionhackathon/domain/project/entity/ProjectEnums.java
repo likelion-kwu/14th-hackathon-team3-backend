@@ -43,7 +43,6 @@ public final class ProjectEnums {
     }
 
     public enum ProjectMemberActionType {
-        INVITE,
         UPDATE,
         SUSPEND,
         REMOVE

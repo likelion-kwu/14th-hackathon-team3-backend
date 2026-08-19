@@ -9,34 +9,31 @@ import com.example.likelionhackathon.domain.project.entity.ProjectEnums.ProjectM
 import com.example.likelionhackathon.domain.project.entity.ProjectEnums.ProjectMemberRole;
 import com.example.likelionhackathon.domain.project.entity.ProjectEnums.ProjectMemberStatus;
 import com.example.likelionhackathon.domain.project.entity.ProjectEnums.ProjectMemberViewStatus;
-import com.example.likelionhackathon.domain.project.entity.ProjectInvitation;
 import com.example.likelionhackathon.domain.project.entity.ProjectMember;
 import com.example.likelionhackathon.domain.project.entity.ProjectTeam;
-import com.example.likelionhackathon.domain.project.repository.ProjectInvitationRepository;
 import com.example.likelionhackathon.domain.project.repository.ProjectMemberRepository;
 import com.example.likelionhackathon.domain.project.repository.ProjectTeamRepository;
+import com.example.likelionhackathon.domain.workspace.entity.WorkspaceEnums.WorkspaceMemberStatus;
+import com.example.likelionhackathon.domain.workspace.entity.WorkspaceMember;
+import com.example.likelionhackathon.domain.workspace.repository.WorkspaceMemberRepository;
 import com.example.likelionhackathon.global.error.ErrorCode;
 import com.example.likelionhackathon.global.error.exception.CustomException;
+import com.example.likelionhackathon.global.security.CurrentUserProvider;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
-import java.util.Locale;
-import java.util.regex.Pattern;
 
 @Service
 @RequiredArgsConstructor
 public class ProjectMemberService {
 
-    private static final Pattern EMAIL_PATTERN = Pattern.compile(
-            "^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$"
-    );
-
     private final ProjectAccessService projectAccessService;
     private final ProjectMemberRepository memberRepository;
-    private final ProjectInvitationRepository invitationRepository;
     private final ProjectTeamRepository teamRepository;
+    private final WorkspaceMemberRepository workspaceMemberRepository;
+    private final CurrentUserProvider currentUserProvider;
 
     @Transactional(readOnly = true)
     public ProjectResponse.MemberDirectory getMembers(
@@ -48,7 +45,6 @@ public class ProjectMemberService {
         projectAccessService.requireAccess(projectId);
 
         boolean includeMembers = status == null || status != ProjectMemberViewStatus.INVITED;
-        boolean includeInvitations = status == null || status == ProjectMemberViewStatus.INVITED;
         List<ProjectResponse.Member> members = includeMembers
                 ? memberRepository.findAllByProjectIdOrderByIdAsc(projectId).stream()
                 .filter(member -> companyId == null || companyId.equals(member.getCompanyId()))
@@ -64,16 +60,47 @@ public class ProjectMemberService {
                 ))
                 .toList()
                 : List.of();
-        List<ProjectResponse.PendingInvitation> invitations = includeInvitations
-                ? invitationRepository.findAllByProjectIdAndPendingTrueOrderByIdAsc(projectId).stream()
-                .filter(invitation -> companyId == null
-                        || companyId.equals(invitation.getTeam().getCompanyId()))
-                .map(invitation -> new ProjectResponse.PendingInvitation(
-                        invitation.getId(), invitation.getEmail()
-                ))
-                .toList()
-                : List.of();
+        List<ProjectResponse.PendingInvitation> invitations = List.of();
         return new ProjectResponse.MemberDirectory(members, invitations);
+    }
+
+    @Transactional
+    public ProjectResponse.Joined join(Long projectId) {
+        Project project = projectAccessService.findProject(projectId);
+        String principalKey = currentUserProvider.currentPrincipalKey();
+        if (memberRepository.findByProjectIdAndPrincipalKey(projectId, principalKey).isPresent()) {
+            throw new CustomException(ErrorCode.ALREADY_PROJECT_MEMBER);
+        }
+
+        WorkspaceMember workspaceMember = workspaceMemberRepository
+                .findByWorkspaceIdAndPrincipalKey(project.getWorkspace().getId(), principalKey)
+                .filter(member -> member.getStatus() == WorkspaceMemberStatus.ACTIVE)
+                .orElseThrow(() -> new CustomException(ErrorCode.WORKSPACE_ACCESS_DENIED));
+        ProjectCompany company = project.getParticipatingCompanies().stream()
+                .filter(candidate -> candidate.getName().equalsIgnoreCase(workspaceMember.getCompanyName()))
+                .findFirst()
+                .orElseThrow(() -> new CustomException(ErrorCode.PROJECT_ACCESS_DENIED));
+        ProjectTeam team = project.getTeams().stream()
+                .filter(candidate -> candidate.getCompanyId().equals(company.getCompanyId()))
+                .findFirst()
+                .orElseThrow(() -> new CustomException(ErrorCode.TEAM_NOT_FOUND));
+
+        ProjectMember member = ProjectMember.createAdmin(
+                workspaceMember.getId(),
+                principalKey,
+                workspaceMember.getName(),
+                company.getCompanyId(),
+                company.getName(),
+                team
+        );
+        project.addMember(member);
+        ProjectMember saved = memberRepository.save(member);
+        return new ProjectResponse.Joined(
+                projectId,
+                saved.getId(),
+                ProjectMemberRole.PROJECT_ADMIN,
+                AccessScope.FULL
+        );
     }
 
     @Transactional
@@ -89,32 +116,9 @@ public class ProjectMemberService {
 
         for (ProjectRequest.MemberAction action : request.actions()) {
             validateAction(action);
-            if (action.type() == ProjectMemberActionType.INVITE) {
-                invite(project, action);
-            } else {
-                updateExistingMember(project, action);
-            }
+            updateExistingMember(project, action);
         }
         return new ProjectResponse.MembersManaged(request.actions().size(), List.of());
-    }
-
-    private void invite(Project project, ProjectRequest.MemberAction action) {
-        String email = action.email().trim().toLowerCase(Locale.ROOT);
-        if (invitationRepository.existsByProjectIdAndEmailIgnoreCaseAndPendingTrue(
-                project.getId(), email
-        )) {
-            throw new CustomException(ErrorCode.INVALID_MEMBER_ACTION);
-        }
-        ProjectTeam team = teamRepository.findByIdAndProjectId(action.teamId(), project.getId())
-                .orElseThrow(() -> new CustomException(ErrorCode.MEMBER_OR_TEAM_NOT_FOUND));
-        ProjectInvitation invitation = ProjectInvitation.create(
-                email,
-                team,
-                action.role() == null ? ProjectMemberRole.MEMBER : action.role(),
-                action.accessScope() == null ? AccessScope.TEAM_ONLY : action.accessScope()
-        );
-        project.addInvitation(invitation);
-        invitationRepository.save(invitation);
     }
 
     private void updateExistingMember(Project project, ProjectRequest.MemberAction action) {
@@ -164,14 +168,6 @@ public class ProjectMemberService {
     private void validateAction(ProjectRequest.MemberAction action) {
         if (action == null || action.type() == null) {
             throw new CustomException(ErrorCode.INVALID_MEMBER_ACTION);
-        }
-        if (action.type() == ProjectMemberActionType.INVITE) {
-            if (action.teamId() == null
-                    || action.email() == null
-                    || !EMAIL_PATTERN.matcher(action.email().trim()).matches()) {
-                throw new CustomException(ErrorCode.INVALID_MEMBER_ACTION);
-            }
-            return;
         }
         if (action.memberId() == null
                 || (action.type() == ProjectMemberActionType.UPDATE
