@@ -30,6 +30,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -82,6 +83,34 @@ class HandoverServiceTest {
         assertThat(response.status()).isEqualTo(HandoverStatus.AI_GENERATING);
         assertThat(response.generationJobId()).startsWith("job_");
         verify(generationService).generate(101L, false);
+    }
+
+    @Test
+    void generateDraftUsesAllProvidersWhenSourceTypesIsEmpty() {
+        OffsetDateTime from = OffsetDateTime.parse("2026-08-10T00:00:00Z");
+        HandoverRequest.GenerateDraft request = new HandoverRequest.GenerateDraft(
+                new HandoverRequest.SourceRange(from, from.plusHours(1)),
+                Set.of()
+        );
+        when(handoverRepository.existsByProjectIdAndCycleIdAndStatusIn(any(), any(), any()))
+                .thenReturn(false);
+        when(activityRepository.existsByProjectIdAndCycleIdAndOccurredAtBetweenAndProviderIn(
+                any(), any(), any(), any(), any()))
+                .thenReturn(true);
+        when(handoverRepository.save(any(Handover.class))).thenAnswer(invocation -> {
+            Handover handover = invocation.getArgument(0);
+            ReflectionTestUtils.setField(handover, "id", 102L);
+            return handover;
+        });
+
+        handoverService.generateDraft(1L, 2L, request);
+
+        verify(activityRepository).existsByProjectIdAndCycleIdAndOccurredAtBetweenAndProviderIn(
+                any(), any(), any(), any(), argThat(providers ->
+                        providers.containsAll(Set.of(Provider.values()))
+                                && providers.size() == Provider.values().length
+                ));
+        verify(generationService).generate(102L, false);
     }
 
     @Test
