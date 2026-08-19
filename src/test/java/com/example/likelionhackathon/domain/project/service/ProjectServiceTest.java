@@ -1,11 +1,15 @@
 package com.example.likelionhackathon.domain.project.service;
 
 import com.example.likelionhackathon.domain.cycle.service.ProjectCycleCreator;
+import com.example.likelionhackathon.domain.cycle.entity.Cycle;
+import com.example.likelionhackathon.domain.cycle.repository.CycleRepository;
 import com.example.likelionhackathon.domain.project.dto.ProjectRequest;
 import com.example.likelionhackathon.domain.project.dto.ProjectResponse;
 import com.example.likelionhackathon.domain.project.entity.Project;
 import com.example.likelionhackathon.domain.project.entity.ProjectEnums.ParticipatingCompanyRole;
 import com.example.likelionhackathon.domain.project.entity.ProjectEnums.ProjectStatus;
+import com.example.likelionhackathon.domain.project.entity.ProjectMember;
+import com.example.likelionhackathon.domain.project.entity.ProjectTeam;
 import com.example.likelionhackathon.domain.project.repository.ProjectMemberRepository;
 import com.example.likelionhackathon.domain.project.repository.ProjectRepository;
 import com.example.likelionhackathon.domain.workspace.entity.Workspace;
@@ -53,6 +57,8 @@ class ProjectServiceTest {
     private ProjectAccessService projectAccessService;
     @Mock
     private ProjectCycleCreator projectCycleCreator;
+    @Mock
+    private CycleRepository cycleRepository;
 
     private ProjectService projectService;
 
@@ -65,7 +71,8 @@ class ProjectServiceTest {
                 workspaceMemberRepository,
                 currentUserProvider,
                 projectAccessService,
-                projectCycleCreator
+                projectCycleCreator,
+                cycleRepository
         );
     }
 
@@ -175,6 +182,58 @@ class ProjectServiceTest {
     }
 
     @Test
+    void getProjectsIncludesCurrentMemberJoinStateAndEntryCycle() {
+        Workspace workspace = workspace();
+        Project joinedProject = Project.create(
+                workspace,
+                "Joined project",
+                "Objective",
+                LocalDate.now().minusDays(1),
+                LocalDate.now().plusDays(10)
+        );
+        ReflectionTestUtils.setField(joinedProject, "id", 10L);
+        Project unjoinedProject = Project.create(
+                workspace,
+                "Unjoined project",
+                "Objective",
+                LocalDate.now().plusDays(20),
+                LocalDate.now().plusDays(30)
+        );
+        ReflectionTestUtils.setField(unjoinedProject, "id", 20L);
+        WorkspaceMember workspaceMember = member(workspace, WorkspaceRole.MEMBER);
+        when(workspaceRepository.findById(1L)).thenReturn(Optional.of(workspace));
+        when(currentUserProvider.currentPrincipalKey()).thenReturn("owner@example.com");
+        when(workspaceMemberRepository.findByWorkspaceIdAndPrincipalKey(1L, "owner@example.com"))
+                .thenReturn(Optional.of(workspaceMember));
+        when(projectRepository.findAllByWorkspaceIdOrderByIdAsc(1L))
+                .thenReturn(List.of(joinedProject, unjoinedProject));
+        ProjectMember joinedMember = ProjectMember.createAdmin(
+                2L, "owner@example.com", "Owner", 1L, "RelAI",
+                ProjectTeam.createDefault(1L, "KR", "Asia/Seoul", "ko")
+        );
+        when(projectMemberRepository.findByProjectIdAndPrincipalKey(10L, "owner@example.com"))
+                .thenReturn(Optional.of(joinedMember));
+        when(cycleRepository.findByProjectIdOrderByStartDateAsc(10L)).thenReturn(List.of(
+                cycle(101L, 10L, LocalDate.now().minusDays(1), LocalDate.now().plusDays(10))
+        ));
+        when(cycleRepository.findByProjectIdOrderByStartDateAsc(20L)).thenReturn(List.of(
+                cycle(201L, 20L, LocalDate.now().plusDays(20), LocalDate.now().plusDays(30))
+        ));
+
+        List<ProjectResponse.Summary> response = projectService.getProjects(1L, null, null);
+
+        assertThat(response).extracting(
+                        ProjectResponse.Summary::projectId,
+                        ProjectResponse.Summary::joined,
+                        ProjectResponse.Summary::cycleId
+                )
+                .containsExactly(
+                        org.assertj.core.groups.Tuple.tuple(10L, true, 101L),
+                        org.assertj.core.groups.Tuple.tuple(20L, false, 201L)
+                );
+    }
+
+    @Test
     void updateRejectsStaleVersion() {
         Project project = Project.create(
                 workspace(),
@@ -241,5 +300,11 @@ class ProjectServiceTest {
         );
         ReflectionTestUtils.setField(member, "id", 2L);
         return member;
+    }
+
+    private Cycle cycle(Long id, Long projectId, LocalDate startDate, LocalDate endDate) {
+        Cycle cycle = Cycle.create(projectId, "Cycle", startDate, endDate, "Goal");
+        ReflectionTestUtils.setField(cycle, "id", id);
+        return cycle;
     }
 }

@@ -1,6 +1,8 @@
 package com.example.likelionhackathon.domain.project.service;
 
 import com.example.likelionhackathon.domain.cycle.service.ProjectCycleCreator;
+import com.example.likelionhackathon.domain.cycle.entity.Cycle;
+import com.example.likelionhackathon.domain.cycle.repository.CycleRepository;
 import com.example.likelionhackathon.domain.project.dto.ProjectRequest;
 import com.example.likelionhackathon.domain.project.dto.ProjectResponse;
 import com.example.likelionhackathon.domain.project.entity.Project;
@@ -28,6 +30,7 @@ import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
@@ -47,6 +50,7 @@ public class ProjectService {
     private final CurrentUserProvider currentUserProvider;
     private final ProjectAccessService projectAccessService;
     private final ProjectCycleCreator projectCycleCreator;
+    private final CycleRepository cycleRepository;
 
     @Transactional
     public ProjectResponse.Created create(Long workspaceId, ProjectRequest.Create request) {
@@ -120,6 +124,7 @@ public class ProjectService {
             normalizedKeyword = normalizedKeyword.toLowerCase(Locale.ROOT);
         }
         final String searchKeyword = normalizedKeyword;
+        String principalKey = currentUserProvider.currentPrincipalKey();
 
         return projectRepository.findAllByWorkspaceIdOrderByIdAsc(workspaceId).stream()
                 .filter(project -> status == null || project.getStatus() == status)
@@ -134,7 +139,11 @@ public class ProjectService {
                         projectMemberRepository.countByProjectIdAndStatus(
                                 project.getId(),
                                 ProjectMemberStatus.ACTIVE
-                        )
+                        ),
+                        projectMemberRepository.findByProjectIdAndPrincipalKey(project.getId(), principalKey)
+                                .filter(member -> member.getStatus() == ProjectMemberStatus.ACTIVE)
+                                .isPresent(),
+                        findEntryCycleId(project.getId())
                 ))
                 .toList();
     }
@@ -366,6 +375,22 @@ public class ProjectService {
 
     private Long normalizeVersion(Long version) {
         return version == null ? 0L : version;
+    }
+
+    private Long findEntryCycleId(Long projectId) {
+        List<Cycle> cycles = cycleRepository.findByProjectIdOrderByStartDateAsc(projectId);
+        LocalDate today = LocalDate.now();
+        for (Cycle cycle : cycles) {
+            if (!today.isBefore(cycle.getStartDate()) && !today.isAfter(cycle.getEndDate())) {
+                return cycle.getId();
+            }
+        }
+        for (Cycle cycle : cycles) {
+            if (cycle.getStartDate().isAfter(today)) {
+                return cycle.getId();
+            }
+        }
+        return cycles.isEmpty() ? null : cycles.get(cycles.size() - 1).getId();
     }
 
     private record CountryDefaults(String countryCode, String timezone, String languageCode) {

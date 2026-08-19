@@ -28,8 +28,10 @@ public final class ProjectResponse {
             LocalDate startDate,
             LocalDate endDate,
             ProjectStatus status,
-            long memberCount
-    ) {
+            long memberCount,
+            boolean joined,
+            Long cycleId
+        ) {
     }
 
     public record Detail(
