@@ -24,6 +24,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Locale;
 
 @Service
 @RequiredArgsConstructor
@@ -80,10 +81,7 @@ public class ProjectMemberService {
                 .filter(candidate -> candidate.getName().equalsIgnoreCase(workspaceMember.getCompanyName()))
                 .findFirst()
                 .orElseThrow(() -> new CustomException(ErrorCode.PROJECT_ACCESS_DENIED));
-        ProjectTeam team = project.getTeams().stream()
-                .filter(candidate -> candidate.getCompanyId().equals(company.getCompanyId()))
-                .findFirst()
-                .orElseThrow(() -> new CustomException(ErrorCode.TEAM_NOT_FOUND));
+        ProjectTeam team = findOrCreateDefaultTeam(project, company);
 
         ProjectMember member = ProjectMember.createAdmin(
                 workspaceMember.getId(),
@@ -195,5 +193,34 @@ public class ProjectMemberService {
                 .map(ProjectCompany::getName)
                 .findFirst()
                 .orElseThrow(() -> new CustomException(ErrorCode.MEMBER_OR_TEAM_NOT_FOUND));
+    }
+
+    private ProjectTeam findOrCreateDefaultTeam(Project project, ProjectCompany company) {
+        return project.getTeams().stream()
+                .filter(candidate -> candidate.getCompanyId().equals(company.getCompanyId()))
+                .findFirst()
+                .orElseGet(() -> {
+                    CountryDefaults defaults = countryDefaults(project.getWorkspace().getCompanyCountryCode());
+                    ProjectTeam team = ProjectTeam.createDefault(
+                            company.getCompanyId(),
+                            defaults.countryCode(),
+                            defaults.timezone(),
+                            defaults.languageCode()
+                    );
+                    project.addTeam(team);
+                    return teamRepository.save(team);
+                });
+    }
+
+    private CountryDefaults countryDefaults(String countryCode) {
+        String normalized = countryCode.toUpperCase(Locale.ROOT);
+        return switch (normalized) {
+            case "KR" -> new CountryDefaults("KR", "Asia/Seoul", "ko");
+            case "GB", "UK" -> new CountryDefaults("GB", "Europe/London", "en");
+            default -> new CountryDefaults(normalized, "UTC", "en");
+        };
+    }
+
+    private record CountryDefaults(String countryCode, String timezone, String languageCode) {
     }
 }

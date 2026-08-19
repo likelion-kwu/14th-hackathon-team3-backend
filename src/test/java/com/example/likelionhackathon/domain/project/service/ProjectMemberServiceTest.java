@@ -109,6 +109,42 @@ class ProjectMemberServiceTest {
     }
 
     @Test
+    void joinCreatesMissingDefaultTeamForParticipatingCompany() {
+        Fixture fixture = fixture();
+        fixture.project().addCompany(new ProjectCompany(2L, "Partner", ParticipatingCompanyRole.PARTNER));
+        when(projectAccessService.findProject(10L)).thenReturn(fixture.project());
+        when(currentUserProvider.currentPrincipalKey()).thenReturn("partner@example.com");
+        WorkspaceMember workspaceMember = WorkspaceMember.createInvitedMember(
+                fixture.project().getWorkspace(),
+                "partner@example.com",
+                "Partner Member",
+                "partner@example.com",
+                "Partner",
+                "General",
+                null,
+                WorkspaceRole.MEMBER
+        );
+        ReflectionTestUtils.setField(workspaceMember, "id", 41L);
+        when(workspaceMemberRepository.findByWorkspaceIdAndPrincipalKey(1L, "partner@example.com"))
+                .thenReturn(Optional.of(workspaceMember));
+        when(teamRepository.save(org.mockito.ArgumentMatchers.any(ProjectTeam.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(memberRepository.save(org.mockito.ArgumentMatchers.any(ProjectMember.class)))
+                .thenAnswer(invocation -> {
+                    ProjectMember member = invocation.getArgument(0);
+                    ReflectionTestUtils.setField(member, "id", 51L);
+                    return member;
+                });
+
+        memberService.join(10L);
+
+        assertThat(fixture.project().getTeams())
+                .extracting(ProjectTeam::getCompanyId)
+                .containsExactlyInAnyOrder(1L, 2L);
+        verify(teamRepository).save(org.mockito.ArgumentMatchers.any(ProjectTeam.class));
+    }
+
+    @Test
     void cannotRemoveLastProjectAdmin() {
         Fixture fixture = fixture();
         when(projectAccessService.findProject(10L)).thenReturn(fixture.project());
