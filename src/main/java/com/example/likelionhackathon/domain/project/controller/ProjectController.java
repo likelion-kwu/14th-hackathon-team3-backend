@@ -99,6 +99,18 @@ public class ProjectController {
         );
     }
 
+    @Operation(summary = "프로젝트 참가")
+    @PostMapping("/projects/{projectId}/join")
+    public ResponseEntity<ApiResponse<ProjectResponse.Joined>> join(
+            @PathVariable Long projectId
+    ) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.created(
+                        "프로젝트에 참가했습니다.",
+                        projectMemberService.join(projectId)
+                ));
+    }
+
     @Operation(summary = "프로젝트 멤버 일괄 관리")
     @PutMapping("/projects/{projectId}/members")
     public ApiResponse<ProjectResponse.MembersManaged> manageMembers(
