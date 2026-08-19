@@ -10,7 +10,6 @@ import com.example.likelionhackathon.domain.handover.entity.HandoverEnums.ItemCa
 import com.example.likelionhackathon.domain.handover.entity.HandoverEnums.Provider;
 import com.example.likelionhackathon.domain.handover.entity.HandoverEnums.ReviewStatus;
 import com.example.likelionhackathon.domain.handover.entity.HandoverEnums.TimingType;
-import com.example.likelionhackathon.domain.handover.repository.CollaborationActivityRepository;
 import com.example.likelionhackathon.domain.handover.repository.HandoverRepository;
 import com.example.likelionhackathon.global.error.ErrorCode;
 import com.example.likelionhackathon.global.error.exception.CustomException;
@@ -30,7 +29,6 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -41,9 +39,6 @@ class HandoverServiceTest {
     private HandoverRepository handoverRepository;
 
     @Mock
-    private CollaborationActivityRepository activityRepository;
-
-    @Mock
     private HandoverGenerationService generationService;
 
     private HandoverService handoverService;
@@ -52,7 +47,6 @@ class HandoverServiceTest {
     void setUp() {
         handoverService = new HandoverService(
                 handoverRepository,
-                activityRepository,
                 generationService
         );
     }
@@ -68,9 +62,6 @@ class HandoverServiceTest {
 
         when(handoverRepository.existsByProjectIdAndCycleIdAndStatusIn(any(), any(), any()))
                 .thenReturn(false);
-        when(activityRepository.existsByProjectIdAndCycleIdAndOccurredAtBetweenAndProviderIn(
-                any(), any(), any(), any(), any()))
-                .thenReturn(true);
         when(handoverRepository.save(any(Handover.class))).thenAnswer(invocation -> {
             Handover handover = invocation.getArgument(0);
             ReflectionTestUtils.setField(handover, "id", 101L);
@@ -86,7 +77,7 @@ class HandoverServiceTest {
     }
 
     @Test
-    void generateDraftUsesAllProvidersWhenSourceTypesIsEmpty() {
+    void generateDraftAllowsEmptySourceTypes() {
         OffsetDateTime from = OffsetDateTime.parse("2026-08-10T00:00:00Z");
         HandoverRequest.GenerateDraft request = new HandoverRequest.GenerateDraft(
                 new HandoverRequest.SourceRange(from, from.plusHours(1)),
@@ -94,9 +85,6 @@ class HandoverServiceTest {
         );
         when(handoverRepository.existsByProjectIdAndCycleIdAndStatusIn(any(), any(), any()))
                 .thenReturn(false);
-        when(activityRepository.existsByProjectIdAndCycleIdAndOccurredAtBetweenAndProviderIn(
-                any(), any(), any(), any(), any()))
-                .thenReturn(true);
         when(handoverRepository.save(any(Handover.class))).thenAnswer(invocation -> {
             Handover handover = invocation.getArgument(0);
             ReflectionTestUtils.setField(handover, "id", 102L);
@@ -105,16 +93,11 @@ class HandoverServiceTest {
 
         handoverService.generateDraft(1L, 2L, request);
 
-        verify(activityRepository).existsByProjectIdAndCycleIdAndOccurredAtBetweenAndProviderIn(
-                any(), any(), any(), any(), argThat(providers ->
-                        providers.containsAll(Set.of(Provider.values()))
-                                && providers.size() == Provider.values().length
-                ));
         verify(generationService).generate(102L, false);
     }
 
     @Test
-    void generateDraftRejectsMissingSourceActivities() {
+    void generateDraftAllowsMissingSourceActivities() {
         OffsetDateTime from = OffsetDateTime.parse("2026-08-10T00:00:00Z");
         HandoverRequest.GenerateDraft request = new HandoverRequest.GenerateDraft(
                 new HandoverRequest.SourceRange(from, from.plusHours(1)),
@@ -123,14 +106,16 @@ class HandoverServiceTest {
 
         when(handoverRepository.existsByProjectIdAndCycleIdAndStatusIn(any(), any(), any()))
                 .thenReturn(false);
-        when(activityRepository.existsByProjectIdAndCycleIdAndOccurredAtBetweenAndProviderIn(
-                any(), any(), any(), any(), any()))
-                .thenReturn(false);
+        when(handoverRepository.save(any(Handover.class))).thenAnswer(invocation -> {
+            Handover handover = invocation.getArgument(0);
+            ReflectionTestUtils.setField(handover, "id", 103L);
+            return handover;
+        });
 
-        assertThatThrownBy(() -> handoverService.generateDraft(1L, 2L, request))
-                .isInstanceOf(CustomException.class)
-                .extracting("errorCode")
-                .isEqualTo(ErrorCode.NO_CONNECTED_SOURCE);
+        HandoverResponse.GenerationJob response = handoverService.generateDraft(1L, 2L, request);
+
+        assertThat(response.handoverId()).isEqualTo(103L);
+        verify(generationService).generate(103L, false);
     }
 
     @Test
