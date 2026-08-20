@@ -97,7 +97,12 @@ public class WorkspaceService {
                     saved,
                     principalKey,
                     principalKey,
-                    saved.getCompanyName()
+                    saved.getCompanyName(),
+                    saved.getCompanies().stream()
+                            .filter(company -> company.getRole() == WorkspaceCompanyRole.HOST)
+                            .findFirst()
+                            .map(WorkspaceCompany::getId)
+                            .orElseThrow(() -> new CustomException(ErrorCode.INTERNAL_SERVER_ERROR))
             ));
             createInitialInvitations(saved, request.safeInviteeEmails());
             return new WorkspaceResponse.Created(
@@ -433,6 +438,7 @@ public class WorkspaceService {
                 request.name().trim(),
                 invitation.getEmail(),
                 request.companyName().trim(),
+                findCompanyId(invitation.getWorkspace(), request.companyName()),
                 request.teamName().trim(),
                 trimToNull(request.jobTitle()),
                 invitation.getRole()
@@ -482,6 +488,14 @@ public class WorkspaceService {
     private Workspace findWorkspace(Long workspaceId) {
         return workspaceRepository.findById(workspaceId)
                 .orElseThrow(() -> new CustomException(ErrorCode.WORKSPACE_NOT_FOUND));
+    }
+
+    private Long findCompanyId(Workspace workspace, String companyName) {
+        return workspace.getCompanies().stream()
+                .filter(company -> company.getName().equalsIgnoreCase(companyName.trim()))
+                .findFirst()
+                .map(WorkspaceCompany::getId)
+                .orElse(null);
     }
 
     private WorkspaceMember requireAccess(Long workspaceId) {

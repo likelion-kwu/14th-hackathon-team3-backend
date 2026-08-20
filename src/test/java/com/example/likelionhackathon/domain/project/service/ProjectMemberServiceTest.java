@@ -73,6 +73,7 @@ class ProjectMemberServiceTest {
                 "Member",
                 "member@example.com",
                 "RelAI",
+                1L,
                 "General",
                 null,
                 WorkspaceRole.MEMBER
@@ -119,7 +120,8 @@ class ProjectMemberServiceTest {
                 "partner@example.com",
                 "Partner Member",
                 "partner@example.com",
-                "Partner",
+                "Legacy partner display name",
+                2L,
                 "General",
                 null,
                 WorkspaceRole.MEMBER
