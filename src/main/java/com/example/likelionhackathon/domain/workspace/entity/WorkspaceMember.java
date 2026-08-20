@@ -51,6 +51,9 @@ public class WorkspaceMember {
     @Column(nullable = false, length = 100)
     private String companyName;
 
+    @Column
+    private Long companyId;
+
     @Column(length = 100)
     private String teamName;
 
@@ -71,7 +74,17 @@ public class WorkspaceMember {
             String name,
             String companyName
     ) {
-        return create(workspace, principalKey, name, null, companyName, null, null, WorkspaceRole.OWNER);
+        return createOwner(workspace, principalKey, name, companyName, null);
+    }
+
+    public static WorkspaceMember createOwner(
+            Workspace workspace,
+            String principalKey,
+            String name,
+            String companyName,
+            Long companyId
+    ) {
+        return create(workspace, principalKey, name, null, companyName, companyId, null, null, WorkspaceRole.OWNER);
     }
 
     public static WorkspaceMember createInvitedMember(
@@ -84,7 +97,23 @@ public class WorkspaceMember {
             String jobTitle,
             WorkspaceRole role
     ) {
-        return create(workspace, principalKey, name, email, companyName, teamName, jobTitle, role);
+        return createInvitedMember(
+                workspace, principalKey, name, email, companyName, null, teamName, jobTitle, role
+        );
+    }
+
+    public static WorkspaceMember createInvitedMember(
+            Workspace workspace,
+            String principalKey,
+            String name,
+            String email,
+            String companyName,
+            Long companyId,
+            String teamName,
+            String jobTitle,
+            WorkspaceRole role
+    ) {
+        return create(workspace, principalKey, name, email, companyName, companyId, teamName, jobTitle, role);
     }
 
     private static WorkspaceMember create(
@@ -93,6 +122,7 @@ public class WorkspaceMember {
             String name,
             String email,
             String companyName,
+            Long companyId,
             String teamName,
             String jobTitle,
             WorkspaceRole role
@@ -103,6 +133,7 @@ public class WorkspaceMember {
         member.name = name;
         member.email = email;
         member.companyName = companyName;
+        member.companyId = companyId;
         member.teamName = teamName;
         member.jobTitle = jobTitle;
         member.role = role;
@@ -134,6 +165,10 @@ public class WorkspaceMember {
             this.teamName = teamName;
         }
         this.jobTitle = jobTitle;
+    }
+
+    public void assignCompanyId(Long companyId) {
+        this.companyId = companyId;
     }
 
     public void suspend() {

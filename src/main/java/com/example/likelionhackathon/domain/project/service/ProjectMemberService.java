@@ -15,6 +15,7 @@ import com.example.likelionhackathon.domain.project.repository.ProjectMemberRepo
 import com.example.likelionhackathon.domain.project.repository.ProjectTeamRepository;
 import com.example.likelionhackathon.domain.workspace.entity.WorkspaceEnums.WorkspaceMemberStatus;
 import com.example.likelionhackathon.domain.workspace.entity.WorkspaceMember;
+import com.example.likelionhackathon.domain.workspace.entity.WorkspaceCompany;
 import com.example.likelionhackathon.domain.workspace.repository.WorkspaceMemberRepository;
 import com.example.likelionhackathon.global.error.ErrorCode;
 import com.example.likelionhackathon.global.error.exception.CustomException;
@@ -77,8 +78,9 @@ public class ProjectMemberService {
                 .findByWorkspaceIdAndPrincipalKey(project.getWorkspace().getId(), principalKey)
                 .filter(member -> member.getStatus() == WorkspaceMemberStatus.ACTIVE)
                 .orElseThrow(() -> new CustomException(ErrorCode.WORKSPACE_ACCESS_DENIED));
+        Long companyId = resolveCompanyId(project, workspaceMember);
         ProjectCompany company = project.getParticipatingCompanies().stream()
-                .filter(candidate -> candidate.getName().equalsIgnoreCase(workspaceMember.getCompanyName()))
+                .filter(candidate -> candidate.getCompanyId().equals(companyId))
                 .findFirst()
                 .orElseThrow(() -> new CustomException(ErrorCode.PROJECT_ACCESS_DENIED));
         ProjectTeam team = findOrCreateDefaultTeam(project, company);
@@ -193,6 +195,19 @@ public class ProjectMemberService {
                 .map(ProjectCompany::getName)
                 .findFirst()
                 .orElseThrow(() -> new CustomException(ErrorCode.MEMBER_OR_TEAM_NOT_FOUND));
+    }
+
+    private Long resolveCompanyId(Project project, WorkspaceMember member) {
+        if (member.getCompanyId() != null) {
+            return member.getCompanyId();
+        }
+        Long resolvedCompanyId = project.getWorkspace().getCompanies().stream()
+                .filter(company -> company.getName().equalsIgnoreCase(member.getCompanyName()))
+                .findFirst()
+                .map(WorkspaceCompany::getId)
+                .orElseThrow(() -> new CustomException(ErrorCode.PROJECT_ACCESS_DENIED));
+        member.assignCompanyId(resolvedCompanyId);
+        return resolvedCompanyId;
     }
 
     private ProjectTeam findOrCreateDefaultTeam(Project project, ProjectCompany company) {
