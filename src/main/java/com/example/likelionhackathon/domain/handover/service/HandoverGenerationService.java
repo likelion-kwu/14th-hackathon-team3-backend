@@ -6,8 +6,9 @@ import com.example.likelionhackathon.domain.handover.entity.Handover;
 import com.example.likelionhackathon.domain.handover.entity.HandoverEvidence;
 import com.example.likelionhackathon.domain.handover.entity.HandoverItem;
 import com.example.likelionhackathon.domain.handover.entity.HandoverEnums.ReviewStatus;
-import com.example.likelionhackathon.domain.handover.repository.CollaborationActivityRepository;
 import com.example.likelionhackathon.domain.handover.repository.HandoverRepository;
+import com.example.likelionhackathon.domain.issue.entity.Issue;
+import com.example.likelionhackathon.domain.issue.repository.IssueRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Async;
@@ -15,6 +16,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -26,7 +28,7 @@ public class HandoverGenerationService {
     private static final int EVIDENCE_SNIPPET_LENGTH = 500;
 
     private final HandoverRepository handoverRepository;
-    private final CollaborationActivityRepository activityRepository;
+    private final IssueRepository issueRepository;
     private final OpenAiHandoverClient openAiHandoverClient;
 
     @Async
@@ -39,17 +41,14 @@ public class HandoverGenerationService {
 
         try {
             handover.markGenerationRunning();
-            List<CollaborationActivity> activities = activityRepository
-                    .findByProjectIdAndCycleIdAndOccurredAtBetweenAndProviderInOrderByOccurredAtAsc(
-                            handover.getProjectId(),
-                            handover.getCycleId(),
-                            handover.getSourceFrom(),
-                            handover.getSourceTo(),
-                            handover.getSourceTypes()
-                    );
+            List<CollaborationActivity> activities = issueRepository
+                    .findByCycleIdOrderByDueDateAscIdAsc(handover.getCycleId())
+                    .stream()
+                    .map(issue -> toCycleActivity(handover, issue))
+                    .toList();
 
             if (activities.isEmpty()) {
-                // 외부 서비스 연동을 사용하지 않는 프로젝트는 빈 초안을 열어 사용자가 직접 작성한다.
+                // 이슈가 없는 사이클은 빈 초안을 열어 사용자가 직접 작성한다.
                 // 새 인수인계는 빈 목록으로 완료되고, 재반영은 기존 초안을 유지한다.
                 handover.completeGeneration(List.copyOf(handover.getItems()), OffsetDateTime.now());
                 return;
@@ -101,6 +100,42 @@ public class HandoverGenerationService {
             ));
         }
         return items;
+    }
+
+    private CollaborationActivity toCycleActivity(Handover handover, Issue issue) {
+        String checklist = issue.getChecklist().isEmpty()
+                ? "없음"
+                : issue.getChecklist().stream()
+                .map(item -> "- [" + (item.isDone() ? "x" : " ") + "] " + item.getContent())
+                .collect(java.util.stream.Collectors.joining("\n"));
+        String content = """
+                이슈 상태: %s
+                우선순위: %s
+                담당자 ID: %d
+                마감일: %s
+                설명: %s
+                완료 조건:
+                %s
+                """.formatted(
+                issue.getStatus(),
+                issue.getPriority(),
+                issue.getAssigneeId(),
+                issue.getDueDate(),
+                issue.getDescription(),
+                checklist
+        );
+        OffsetDateTime occurredAt = issue.getUpdatedAt() == null
+                ? OffsetDateTime.now(ZoneOffset.UTC)
+                : issue.getUpdatedAt().atOffset(ZoneOffset.UTC);
+        return new CollaborationActivity(
+                handover.getProjectId(),
+                handover.getCycleId(),
+                com.example.likelionhackathon.domain.handover.entity.HandoverEnums.Provider.CYCLE,
+                "이슈 #" + issue.getId() + ": " + issue.getTitle(),
+                content,
+                "/issues/" + issue.getId(),
+                occurredAt
+        );
     }
 
     private List<Integer> safeIndexes(List<Integer> indexes) {

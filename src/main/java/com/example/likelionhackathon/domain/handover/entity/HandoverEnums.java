@@ -6,7 +6,7 @@ public final class HandoverEnums {
     }
 
     public enum Provider {
-        SLACK, TEAMS, NOTION, GOOGLE_DRIVE
+        CYCLE, SLACK, TEAMS, NOTION, GOOGLE_DRIVE
     }
 
     public enum HandoverStatus {

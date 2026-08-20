@@ -91,9 +91,8 @@ public class HandoverService {
     }
 
     private Set<Provider> sourceTypesOrAll(Set<Provider> sourceTypes) {
-        return sourceTypes == null || sourceTypes.isEmpty()
-                ? Set.of(Provider.values())
-                : sourceTypes;
+        // 인수인계의 근거는 외부 연동이 아닌 해당 사이클의 이슈와 진행 상태다.
+        return Set.of(Provider.CYCLE);
     }
 
     private Set<Provider> sourceTypesOrDefault(
